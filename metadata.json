@@ -1,0 +1,6 @@
+{
+  "name": "Rasel Dev BD",
+  "description": "Developer portfolio, dynamic content sharing platform for blogs, photo galleries, and project showcases, with a secure admin dashboard and GitHub Pages static site generator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
