@@ -767,6 +767,11 @@ private fun AdminGithubPagesGeneratorTab(
     val artifacts = remember(siteConfig, categories, publishedItems) {
         listOf(
             Triple(
+                "docs/index.html (Zero-Build Standalone)",
+                "index.html",
+                StaticSiteGenerator.generateStandaloneIndexHtml(siteConfig, categories, publishedItems)
+            ),
+            Triple(
                 "public/data/content-bundle.json",
                 "content-bundle.json",
                 StaticSiteGenerator.generateStaticJsonBundle(siteConfig, categories, publishedItems)
@@ -777,9 +782,14 @@ private fun AdminGithubPagesGeneratorTab(
                 StaticSiteGenerator.generateReactAppJsx(siteConfig, categories, publishedItems)
             ),
             Triple(
-                "index.html",
-                "index.html",
-                StaticSiteGenerator.generateIndexHtml(siteConfig)
+                "package.json",
+                "package.json",
+                StaticSiteGenerator.generatePackageJson()
+            ),
+            Triple(
+                "vite.config.js",
+                "vite.config.js",
+                StaticSiteGenerator.generateViteConfig()
             ),
             Triple(
                 ".github/workflows/deploy-gh-pages.yml",
@@ -806,6 +816,27 @@ private fun AdminGithubPagesGeneratorTab(
         }
     }
 
+    val saveZipBundleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    StaticSiteGenerator.writeGithubPagesZipArchive(
+                        context = context,
+                        outputStream = out,
+                        config = siteConfig,
+                        categories = categories,
+                        publishedItems = publishedItems
+                    )
+                }
+                onShowStatus("Exported complete GitHub Pages ZIP archive!")
+            }.onFailure {
+                onShowStatus("Failed to export ZIP: ${it.localizedMessage}")
+            }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -822,7 +853,7 @@ private fun AdminGithubPagesGeneratorTab(
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
                         text = "GitHub Pages Static Site Generator",
@@ -830,15 +861,33 @@ private fun AdminGithubPagesGeneratorTab(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Compiles all published categories (${categories.size}), blog posts (${publishedItems.count { it.contentType == ContentType.BLOG }}), photos (${publishedItems.count { it.contentType == ContentType.PHOTO }}), and projects (${publishedItems.count { it.contentType == ContentType.PROJECT }}) into static React + JSON files ready for ${siteConfig.githubPagesDomain}.",
+                        text = "Compiles all published categories (${categories.size}), blog posts (${publishedItems.count { it.contentType == ContentType.BLOG }}), photos (${publishedItems.count { it.contentType == ContentType.PHOTO }}), and projects (${publishedItems.count { it.contentType == ContentType.PROJECT }}) into ready-to-host GitHub Pages files for ${siteConfig.githubPagesDomain}.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    Button(
+                        onClick = {
+                            saveZipBundleLauncher.launch("rasel-dev-bd-gh-pages.zip")
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumInteractiveComponentSize()
+                            .testTag("gh_pages_download_zip_btn"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF10B981),
+                            contentColor = Color(0xFF022C22)
+                        )
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = "Download ZIP", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Download Complete GitHub Pages ZIP", fontWeight = FontWeight.Bold)
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 6.dp),
+                            .padding(top = 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
