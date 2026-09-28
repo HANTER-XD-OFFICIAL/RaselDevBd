@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.CategoryEntity
+import com.example.data.CmaAuditLogEntity
 import com.example.data.ContentItemEntity
 import com.example.data.ContentType
 import com.example.data.PortfolioDatabase
@@ -30,8 +31,8 @@ object NavRoutes {
 
 enum class AdminSubTab {
     CONTENT,
-    CATEGORIES,
     HEADLESS_CMS,
+    CATEGORIES,
     STATIC_EXPORT,
     SETTINGS
 }
@@ -45,6 +46,9 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val publishedContentItems: StateFlow<List<ContentItemEntity>> = repository.publishedContentItems
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recentAuditLogs: StateFlow<List<CmaAuditLogEntity>> = repository.recentAuditLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val siteConfig: StateFlow<SiteConfigEntity> = combine(
@@ -166,7 +170,7 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
         if (pinInput.trim() == expectedPin || pinInput.trim() == "2026") {
             _isAdminUnlocked.value = true
             _adminAuthError.value = null
-            showBanner("CMS Studio unlocked. Ready to post content or sync with ${siteConfig.value.cmsProvider}.")
+            showBanner("Contentful CMA Studio unlocked. Ready to post rich media & download links.")
         } else {
             _adminAuthError.value = "Incorrect PIN. Default studio PIN is $expectedPin."
         }
@@ -175,10 +179,10 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
     fun lockAdmin() {
         _isAdminUnlocked.value = false
         _adminAuthError.value = null
-        showBanner("Admin Studio session locked.")
+        showBanner("Contentful CMA Studio session locked.")
     }
 
-    fun openCreateContentModal(defaultType: String = ContentType.BLOG) {
+    fun openCreateContentModal(defaultType: String = ContentType.PROJECT) {
         val defaultCat = categories.value.firstOrNull {
             it.contentTypeScope == ContentType.ALL || it.contentTypeScope == defaultType
         } ?: categories.value.firstOrNull()
@@ -197,6 +201,14 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
                 ContentType.PHOTO -> "drawable:img_photo_dhaka"
                 else -> "drawable:img_hero_banner"
             },
+            downloadUrl = "",
+            downloadLabel = when (defaultType) {
+                ContentType.PROJECT -> "Download Release (.ZIP / .APK)"
+                ContentType.PHOTO -> "Download 4K Asset (.JPG)"
+                else -> "Download Article Resources (.PDF)"
+            },
+            downloadFileSize = "12.5 MB",
+            versionTag = "v1.0.0",
             readingTimeMinutes = if (defaultType == ContentType.PHOTO) 2 else 5,
             isFeatured = false,
             isPublished = true
@@ -214,7 +226,7 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
         _editingContentItem.value = null
     }
 
-    fun saveContentItem(item: ContentItemEntity, pushToCmsImmediately: Boolean = false) {
+    fun saveContentItem(item: ContentItemEntity, pushToCmsImmediately: Boolean = true) {
         viewModelScope.launch {
             val cleanSlug = item.slug.ifBlank {
                 item.title.lowercase()
@@ -238,9 +250,13 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
                 _isCmsSyncing.value = true
                 val cmsRes = repository.publishItemToHeadlessCms(persisted)
                 _isCmsSyncing.value = false
-                showBanner(cmsRes.message)
+                if (cmsRes.success) {
+                    showBanner(cmsRes.message)
+                } else {
+                    showBanner("Saved '${finalItem.title}' locally • ${cmsRes.message}")
+                }
             } else {
-                showBanner("Saved '${finalItem.title}' locally & updated static bundle.")
+                showBanner("Saved '${finalItem.title}' to local studio & static bundle.")
             }
         }
     }
@@ -297,30 +313,43 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
         }
     }
 
-    fun saveHeadlessCmsConfig(
+    fun unpublishItemInHeadlessCms(item: ContentItemEntity) {
+        if (_isCmsSyncing.value) return
+        viewModelScope.launch {
+            _isCmsSyncing.value = true
+            val result = repository.unpublishItemInHeadlessCms(item)
+            _isCmsSyncing.value = false
+            showBanner(result.message)
+        }
+    }
+
+    fun clearCmaAuditLogs() {
+        viewModelScope.launch {
+            repository.clearCmaAuditLogs()
+            showBanner("Cleared Contentful CMA activity logs")
+        }
+    }
+
+    fun saveHeadlessCmsModelSettings(
         provider: String,
-        contentfulSpaceId: String,
         contentfulEnvironment: String,
-        contentfulDeliveryToken: String,
-        contentfulManagementToken: String,
+        contentfulContentType: String,
+        contentfulLocale: String,
         strapiBaseUrl: String,
-        strapiApiToken: String,
         autoSyncOnPublish: Boolean
     ) {
         viewModelScope.launch {
             val updated = siteConfig.value.copy(
                 cmsProvider = provider,
-                contentfulSpaceId = contentfulSpaceId.trim(),
                 contentfulEnvironment = contentfulEnvironment.trim().ifBlank { "master" },
-                contentfulDeliveryToken = contentfulDeliveryToken.trim(),
-                contentfulManagementToken = contentfulManagementToken.trim(),
+                contentfulContentType = contentfulContentType.trim().ifBlank { "portfolioItem" },
+                contentfulLocale = contentfulLocale.trim().ifBlank { "en-US" },
                 strapiBaseUrl = strapiBaseUrl.trim(),
-                strapiApiToken = strapiApiToken.trim(),
                 autoSyncCmsOnPublish = autoSyncOnPublish,
-                lastCmsSyncStatus = "Configured $provider Headless CMS integration"
+                lastCmsSyncStatus = "Configured $provider CMA (${contentfulContentType.trim()} • ${contentfulLocale.trim()})"
             )
             repository.updateSiteConfig(updated)
-            showBanner("Saved $provider Headless CMS credentials & endpoints.")
+            showBanner("Updated Contentful CMA model & environment settings.")
         }
     }
 
@@ -429,7 +458,7 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
     fun resetDemoData() {
         viewModelScope.launch {
             repository.resetToFactoryDemo()
-            showBanner("Restored default Rasel Dev BD portfolio & CMS data")
+            showBanner("Restored default Rasel Dev BD Contentful CMA portfolio")
         }
     }
 
@@ -445,8 +474,9 @@ class PortfolioViewModel(private val repository: PortfolioRepository) : ViewMode
 class PortfolioViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        val db = PortfolioDatabase.getDatabase(context.applicationContext)
-        val repository = PortfolioRepository(db.portfolioDao())
+        val appContext = context.applicationContext
+        val db = PortfolioDatabase.getDatabase(appContext)
+        val repository = PortfolioRepository(appContext, db.portfolioDao())
         return PortfolioViewModel(repository) as T
     }
 }

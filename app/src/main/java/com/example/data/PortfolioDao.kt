@@ -68,6 +68,21 @@ interface PortfolioDao {
     @Query("UPDATE content_items SET categoryName = :newName WHERE categoryId = :categoryId")
     suspend fun updateCategoryNameForItems(categoryId: Long, newName: String)
 
+    @Query("SELECT * FROM cma_audit_logs ORDER BY timestampEpoch DESC LIMIT 30")
+    fun getRecentAuditLogs(): Flow<List<CmaAuditLogEntity>>
+
+    @Query("SELECT COUNT(*) FROM cma_audit_logs")
+    suspend fun getAuditLogCount(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAuditLog(log: CmaAuditLogEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAuditLogs(logs: List<CmaAuditLogEntity>)
+
+    @Query("DELETE FROM cma_audit_logs")
+    suspend fun clearAuditLogs()
+
     @Query("SELECT * FROM site_config WHERE id = 1 LIMIT 1")
     fun getSiteConfig(): Flow<SiteConfigEntity?>
 

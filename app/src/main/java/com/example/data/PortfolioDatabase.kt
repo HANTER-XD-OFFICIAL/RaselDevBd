@@ -9,9 +9,10 @@ import androidx.room.RoomDatabase
     entities = [
         CategoryEntity::class,
         ContentItemEntity::class,
+        CmaAuditLogEntity::class,
         SiteConfigEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class PortfolioDatabase : RoomDatabase() {
@@ -47,7 +48,7 @@ object InitialSeedData {
             slug = "react-headless-cms",
             contentTypeScope = ContentType.ALL,
             accentHex = "#10B981",
-            description = "React 18, Contentful CDA/CMA, Strapi REST v4/v5, and hybrid GitHub Pages architectures.",
+            description = "Contentful Content Management API (CMA), rich media releases, and live React web updates.",
             sortOrder = 1
         ),
         CategoryEntity(
@@ -56,7 +57,7 @@ object InitialSeedData {
             slug = "android-kotlin",
             contentTypeScope = ContentType.ALL,
             accentHex = "#06B6D4",
-            description = "Jetpack Compose, Material 3 adaptive layouts, Room offline-first caching, and Coroutines.",
+            description = "APK releases, Jetpack Compose starter templates, and mobile SDK packages.",
             sortOrder = 2
         ),
         CategoryEntity(
@@ -65,7 +66,7 @@ object InitialSeedData {
             slug = "cloud-devops",
             contentTypeScope = ContentType.ALL,
             accentHex = "#3B82F6",
-            description = "GitHub Actions CI/CD, Docker microservices, edge webhooks, and automated static builds.",
+            description = "Docker bundles, Kubernetes helm charts, and GitHub Actions automation kits.",
             sortOrder = 3
         ),
         CategoryEntity(
@@ -74,7 +75,7 @@ object InitialSeedData {
             slug = "dhaka-street-tech",
             contentTypeScope = ContentType.PHOTO,
             accentHex = "#F43F5E",
-            description = "Visual stories, twilight cityscapes, and developer workspace photography from Bangladesh.",
+            description = "High-resolution 4K wallpaper packs, RAW photography presets, and visual stories.",
             sortOrder = 4
         ),
         CategoryEntity(
@@ -83,7 +84,7 @@ object InitialSeedData {
             slug = "system-architecture",
             contentTypeScope = ContentType.BLOG,
             accentHex = "#A855F7",
-            description = "Deep-dive engineering essays on API design, performance, and distributed content pipelines.",
+            description = "Downloadable PDF system blueprints, schema templates, and API engineering guides.",
             sortOrder = 5
         )
     )
@@ -94,29 +95,28 @@ object InitialSeedData {
         return listOf(
             ContentItemEntity(
                 id = 1L,
-                title = "Rasel Dev BD — Headless CMS + GitHub Pages Hybrid Platform",
+                title = "Rasel Dev BD — Contentful CMA & React Starter Kit",
                 slug = "rasel-dev-bd-headless-cms-platform",
                 contentType = ContentType.PROJECT,
                 categoryId = 1L,
                 categoryName = "React & Headless CMS",
-                summary = "Zero-redeploy React 18 & Contentful/Strapi developer platform that fetches live CMS entries at runtime and falls back to static GitHub Pages JSON.",
+                summary = "Complete Contentful Content Management API (CMA) & React 18 platform with rich media image uploads, markdown descriptions, and instant download links.",
                 markdownBody = """
-## Why a Hybrid Headless CMS + Static Architecture?
+## Direct Contentful CMA Publishing for Immediate Website Updates
 
-Traditional GitHub Pages static sites require editing source code or waiting for a full CI/CD build every time you publish a blog post, upload a photo with captions, or showcase a new project.
+**Rasel Dev BD** connects directly to the **Contentful Content Management API (`api.contentful.com`)** and **Asset Upload API (`upload.contentful.com`)** so you can create and publish rich media entries from your Android device without touching code:
 
-**Rasel Dev BD** solves this with a dual-engine architecture:
-
-### 1. Live Headless CMS Delivery (Contentful & Strapi)
-- **Contentful Content Delivery API (CDA)**: Fetches live `portfolioItem` entries and resolves linked media Assets (`https://cdn.contentful.com/spaces/{spaceId}/environments/{env}/entries?include=2`).
-- **Strapi REST API v4/v5**: Queries `/api/portfolio-items?populate=*&sort=updatedAt:desc` with automatic media URL normalization.
-- **Instant No-Code Publishing**: Using the **Contentful Management API (CMA)** or **Strapi Bearer Token**, the Admin Studio publishes new posts straight to the cloud without touching a single line of code.
-
-### 2. Resilient Static Fallback (`content-bundle.json`)
-- If the visitor is offline or if CMS credentials are not yet configured, the React app seamlessly renders the pre-generated `public/data/content-bundle.json` snapshot hosted on GitHub Pages.
+### What Gets Published to Contentful CMA
+- **Rich Images & Binary Assets**: Pick any image from your device gallery to upload via `upload.contentful.com`, process, and link to your Contentful entry, or attach a remote CDN image URL.
+- **Structured Descriptions**: Short card summary (`summary` / `description`) and full Markdown body (`markdownBody`).
+- **Direct Download Links**: Attach release packages, APK builds, ZIP templates, or high-resolution asset bundles (`downloadUrl`, `downloadLabel`, `downloadFileSize`, `versionTag`) that appear immediately on the live website.
                 """.trimIndent(),
                 mediaSource = "drawable:img_project_cloud",
-                techStackCsv = "React 18,Contentful API,Strapi v5,Tailwind CSS,GitHub Pages",
+                downloadUrl = "https://github.com/raseldevbd/raseldevbd.github.io/archive/refs/heads/main.zip",
+                downloadLabel = "Download Starter Kit (.ZIP)",
+                downloadFileSize = "14.8 MB",
+                versionTag = "v2.4.0",
+                techStackCsv = "Contentful CMA,React 18,Kotlin,Jetpack Compose,GitHub Pages",
                 liveDemoUrl = "https://raseldevbd.github.io",
                 repoUrl = "https://github.com/raseldevbd/raseldevbd.github.io",
                 readingTimeMinutes = 6,
@@ -125,95 +125,116 @@ Traditional GitHub Pages static sites require editing source code or waiting for
                 createdAtEpoch = now - 5 * dayMs,
                 updatedAtEpoch = now - 1 * dayMs,
                 cmsEntryId = "cf-entry-rasel-cms-01",
+                cmsAssetId = "cf-asset-cloud-01",
+                cmsVersion = 3,
+                cmsStatus = CmaEntryStatus.PUBLISHED,
                 cmsProvider = CmsProviderType.CONTENTFUL,
-                cmsSyncedAt = now - 3_600_000L
+                cmsSyncedAt = now - 1_800_000L
             ),
             ContentItemEntity(
                 id = 2L,
-                title = "Integrating Contentful & Strapi with a React Static Site on GitHub Pages",
+                title = "Contentful Content Management API (CMA) Schema & Blueprint",
                 slug = "integrating-contentful-strapi-react-github-pages",
                 contentType = ContentType.BLOG,
-                categoryId = 1L,
-                categoryName = "React & Headless CMS",
-                summary = "A step-by-step engineering guide to posting blogs, project showcases, and photo stories via Contentful or Strapi without changing code.",
+                categoryId = 5L,
+                categoryName = "System Architecture",
+                summary = "Step-by-step guide and downloadable JSON Content-Type migration script for posting images, descriptions, and download links to Contentful CMA.",
                 markdownBody = """
-## Posting Content Without Changing Code
+## Posting Rich Media Content via Contentful CMA
 
-When hosting a React portfolio on **GitHub Pages**, decoupling your content layer from your presentation code gives you the best of both worlds: free global CDN hosting and dynamic CMS publishing.
+Using the **Contentful Content Management API**, entries follow a deterministic two-phase commit:
 
-### Contentful Setup (`portfolioItem` Content Model)
-Create a Content Type with ID `portfolioItem` and the following fields:
-- `title` (Short text, required)
-- `slug` (Short text)
-- `contentType` (`PROJECT`, `BLOG`, or `PHOTO`)
-- `categoryName` (Short text — e.g. `React & Headless CMS`)
-- `summary` (Short text)
-- `markdownBody` (Long text / Markdown)
-- `mediaSource` (Short text URL or linked `media` Asset)
-- `photoCaption`, `photoLocation`, `exifCamera` (Short text for photography)
-- `techStackCsv`, `liveDemoUrl`, `repoUrl` (Short text for projects)
+### 1. Create or Update Entry (`POST` / `PUT`)
+Send localized field values (`en-US`) to:
+```
+POST https://api.contentful.com/spaces/{space_id}/environments/master/entries
+X-Contentful-Content-Type: portfolioItem
+Authorization: Bearer {CONTENTFUL_MANAGEMENT_TOKEN}
+```
 
-### Strapi v4/v5 Setup (`portfolio-items` Collection)
-Create a Collection Type named `portfolio-item` (plural `portfolio-items`) with the same attributes, and enable `find`, `findOne`, and authenticated `create`/`update` permissions under **Settings → Users & Permissions → Roles**.
+### 2. Activate Live Website Update (`PUT /published`)
+Immediately publish the entry version so your connected React website reflects the new image, description, and download button:
+```
+PUT https://api.contentful.com/spaces/{space_id}/environments/master/entries/{entry_id}/published
+X-Contentful-Version: {version}
+```
                 """.trimIndent(),
                 mediaSource = "drawable:img_hero_banner",
-                techStackCsv = "Contentful,Strapi,React,REST API,JSON",
+                downloadUrl = "https://raw.githubusercontent.com/raseldevbd/raseldevbd.github.io/main/docs/data/content-bundle.json",
+                downloadLabel = "Download CMA Schema (.JSON)",
+                downloadFileSize = "42 KB",
+                versionTag = "v2.0-schema",
+                techStackCsv = "Contentful CMA,REST API,JSON Schema,Webhooks",
                 readingTimeMinutes = 7,
                 isFeatured = true,
                 isPublished = true,
                 createdAtEpoch = now - 4 * dayMs,
                 updatedAtEpoch = now - 12 * 3_600_000L,
                 cmsEntryId = "cf-entry-headless-guide-02",
+                cmsAssetId = "cf-asset-hero-02",
+                cmsVersion = 2,
+                cmsStatus = CmaEntryStatus.PUBLISHED,
                 cmsProvider = CmsProviderType.CONTENTFUL,
                 cmsSyncedAt = now - 3_600_000L
             ),
             ContentItemEntity(
                 id = 3L,
-                title = "Blue Hour Over Hatirjheel Lake, Dhaka",
+                title = "Blue Hour Over Hatirjheel Lake — 4K Wallpaper & LUT Pack",
                 slug = "blue-hour-hatirjheel-dhaka",
                 contentType = ContentType.PHOTO,
                 categoryId = 4L,
                 categoryName = "Dhaka Street & Tech Life",
-                summary = "Long-exposure twilight reflection of Dhaka's illuminated Hatirjheel bridge after an evening coding sprint.",
+                summary = "High-resolution twilight photography from Dhaka with downloadable 4K uncompressed wallpaper and Sony Alpha color-grading LUTs.",
                 markdownBody = """
 Captured during blue hour in the heart of Dhaka. The neon emerald and cyan reflections across the water inspired the color palette of the **Rasel Dev BD** developer studio.
 
-Uploaded and captioned via the Headless CMS media pipeline with full EXIF metadata preservation.
+Published via the Contentful CMA binary asset pipeline with full EXIF metadata and a direct 4K wallpaper download link.
                 """.trimIndent(),
                 mediaSource = "drawable:img_photo_dhaka",
                 photoCaption = "Twilight reflections along the Hatirjheel amphitheater bridge — Dhaka, Bangladesh.",
                 photoLocation = "Hatirjheel, Dhaka, Bangladesh",
                 exifCamera = "Sony A7 IV • 24mm f/1.4 GM • ISO 100 • 2.5s",
-                techStackCsv = "Street Photography,Blue Hour,Dhaka,Sony Alpha",
+                downloadUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=3840&q=90",
+                downloadLabel = "Download 4K Photo & LUT (.JPG)",
+                downloadFileSize = "28.4 MB",
+                versionTag = "4K-RAW",
+                techStackCsv = "4K Wallpaper,Dhaka,Sony Alpha,Contentful Asset",
                 readingTimeMinutes = 2,
                 isFeatured = true,
                 isPublished = true,
                 createdAtEpoch = now - 3 * dayMs,
                 updatedAtEpoch = now - 2 * dayMs,
                 cmsEntryId = "cf-entry-photo-dhaka-03",
+                cmsAssetId = "cf-asset-dhaka-03",
+                cmsVersion = 1,
+                cmsStatus = CmaEntryStatus.PUBLISHED,
                 cmsProvider = CmsProviderType.CONTENTFUL,
                 cmsSyncedAt = now - 3_600_000L
             ),
             ContentItemEntity(
                 id = 4L,
-                title = "BongoCloud — Multi-Region Kubernetes Telemetry & Cost Radar",
+                title = "BongoCloud — Kubernetes Telemetry CLI & Helm Chart Release",
                 slug = "bongocloud-kubernetes-telemetry",
                 contentType = ContentType.PROJECT,
                 categoryId = 3L,
                 categoryName = "Cloud & DevOps",
-                summary = "Real-time cloud cluster health, pod autoscaling metrics, and anomaly alerting dashboard built for South Asian fintech teams.",
+                summary = "Real-time cloud cluster health, pod autoscaling metrics, and downloadable multi-region Helm chart bundle.",
                 markdownBody = """
 ## Overview
 
 **BongoCloud** aggregates Prometheus metrics and OpenTelemetry traces into a sub-second reactive dashboard.
 
-### Key Capabilities
-- Real-time node CPU/Memory pressure heatmaps.
-- Automated Slack & webhook incident dispatch.
-- Synchronized release notes powered by Strapi Headless CMS webhooks.
+### Included in the Release Download
+- Pre-configured Kubernetes Helm chart (`bongocloud-chart-v1.8.tgz`).
+- Grafana JSON dashboards and alert rules.
+- Contentful CMA release notes webhook listener.
                 """.trimIndent(),
                 mediaSource = "drawable:img_project_cloud",
-                techStackCsv = "Kotlin,Go,React,Kubernetes,Prometheus",
+                downloadUrl = "https://github.com/raseldevbd/bongocloud-radar/releases/latest",
+                downloadLabel = "Download Helm Release (.TGZ)",
+                downloadFileSize = "8.2 MB",
+                versionTag = "v1.8.2",
+                techStackCsv = "Kotlin,Go,Kubernetes,Prometheus,Contentful CMA",
                 liveDemoUrl = "https://raseldevbd.github.io/#projects",
                 repoUrl = "https://github.com/raseldevbd/bongocloud-radar",
                 readingTimeMinutes = 5,
@@ -221,33 +242,71 @@ Uploaded and captioned via the Headless CMS media pipeline with full EXIF metada
                 isPublished = true,
                 createdAtEpoch = now - 6 * dayMs,
                 updatedAtEpoch = now - 3 * dayMs,
-                cmsEntryId = "strapi-entry-bongocloud-04",
-                cmsProvider = CmsProviderType.STRAPI,
+                cmsEntryId = "cf-entry-bongocloud-04",
+                cmsAssetId = "cf-asset-bongo-04",
+                cmsVersion = 4,
+                cmsStatus = CmaEntryStatus.PUBLISHED,
+                cmsProvider = CmsProviderType.CONTENTFUL,
                 cmsSyncedAt = now - 7_200_000L
             ),
             ContentItemEntity(
                 id = 5L,
-                title = "Offline-First Android Apps with Room + Headless CMS Sync",
+                title = "Compose + Room Offline-First Contentful CMA Companion Architecture",
                 slug = "offline-first-android-room-headless-cms",
                 contentType = ContentType.BLOG,
                 categoryId = 2L,
                 categoryName = "Android & Kotlin",
-                summary = "Designing resilient mobile architectures that pair Jetpack Compose and Room SQLite caching with Contentful and Strapi REST APIs.",
+                summary = "Architectural deep dive with downloadable Kotlin sample code for pairing Jetpack Compose and Room with Contentful's Content Management API.",
                 markdownBody = """
-## Single Source of Truth with Room + Headless CMS
+## Single Source of Truth with Room + Contentful CMA
 
-Mobile networks can be unpredictable. By treating **Room** as the local reactive source of truth (`Flow<List<ContentItemEntity>>`) and synchronizing delta updates from **Contentful** or **Strapi** in background coroutines, the UI renders in 0ms on cold start while staying up to date with remote CMS edits.
+By treating **Room** as the local reactive source of truth and dispatching `POST /entries` + `PUT /entries/{id}/published` calls to **Contentful CMA**, creators can draft rich media entries offline and publish them to their live website in one tap.
                 """.trimIndent(),
                 mediaSource = "drawable:img_avatar_rasel",
-                techStackCsv = "Kotlin,Jetpack Compose,Room,OkHttp,Coroutines",
+                downloadUrl = "https://github.com/raseldevbd/android-contentful-cma-kit/archive/refs/heads/main.zip",
+                downloadLabel = "Download Kotlin Sample (.ZIP)",
+                downloadFileSize = "6.1 MB",
+                versionTag = "v1.2.0",
+                techStackCsv = "Kotlin,Jetpack Compose,Room,Contentful CMA,OkHttp",
                 readingTimeMinutes = 6,
                 isFeatured = false,
                 isPublished = true,
                 createdAtEpoch = now - 7 * dayMs,
                 updatedAtEpoch = now - 4 * dayMs,
                 cmsEntryId = "cf-entry-room-cms-05",
+                cmsAssetId = "cf-asset-avatar-05",
+                cmsVersion = 1,
+                cmsStatus = CmaEntryStatus.PUBLISHED,
                 cmsProvider = CmsProviderType.CONTENTFUL,
                 cmsSyncedAt = now - 3_600_000L
+            )
+        )
+    }
+
+    fun defaultAuditLogs(): List<CmaAuditLogEntity> {
+        val now = System.currentTimeMillis()
+        return listOf(
+            CmaAuditLogEntity(
+                id = 1L,
+                actionType = "PUBLISH_ENTRY",
+                entryTitle = "Rasel Dev BD — Contentful CMA & React Starter Kit",
+                cmsEntryId = "cf-entry-rasel-cms-01",
+                endpoint = "PUT /spaces/{space_id}/environments/master/entries/cf-entry-rasel-cms-01/published",
+                httpStatus = 200,
+                success = true,
+                message = "Published entry v3 with downloadUrl & media asset to live website.",
+                timestampEpoch = now - 1_800_000L
+            ),
+            CmaAuditLogEntity(
+                id = 2L,
+                actionType = "UPLOAD_ASSET",
+                entryTitle = "Blue Hour Over Hatirjheel Lake — 4K Wallpaper & LUT Pack",
+                cmsEntryId = "cf-asset-dhaka-03",
+                endpoint = "POST https://upload.contentful.com/spaces/{space_id}/uploads",
+                httpStatus = 201,
+                success = true,
+                message = "Processed & published 4K image asset (28.4 MB) to Contentful CDN.",
+                timestampEpoch = now - 3_600_000L
             )
         )
     }

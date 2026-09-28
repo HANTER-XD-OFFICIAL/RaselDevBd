@@ -4,12 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,12 +17,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
@@ -32,7 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
@@ -113,6 +109,7 @@ fun RaselDevBdApp(
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val allItems by viewModel.allContentItems.collectAsStateWithLifecycle()
     val publishedItems by viewModel.publishedContentItems.collectAsStateWithLifecycle()
+    val auditLogs by viewModel.recentAuditLogs.collectAsStateWithLifecycle()
     val siteConfig by viewModel.siteConfig.collectAsStateWithLifecycle()
     val selectedCategoryId by viewModel.selectedCategoryId.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
@@ -166,7 +163,7 @@ fun RaselDevBdApp(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "${siteConfig.cmsProvider} Headless CMS • ${siteConfig.customDomain}",
+                                        text = "Contentful CMA Studio • ${siteConfig.customDomain}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -175,22 +172,18 @@ fun RaselDevBdApp(
                         },
                         actions = {
                             Surface(
-                                color = if (isAdminUnlocked) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
+                                color = MaterialTheme.colorScheme.primaryContainer,
                                 shape = RoundedCornerShape(50),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isAdminUnlocked) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                                ),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
                                     .clickable {
-                                        viewModel.setAdminTab(AdminSubTab.HEADLESS_CMS)
-                                        viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
+                                        val defaultType = when (currentRoute) {
+                                            NavRoutes.ROUTE_BLOG -> ContentType.BLOG
+                                            NavRoutes.ROUTE_PHOTOS -> ContentType.PHOTO
+                                            else -> ContentType.PROJECT
+                                        }
+                                        viewModel.openCreateContentModal(defaultType)
                                     }
                                     .testTag("top_bar_cms_status_pill")
                             ) {
@@ -199,16 +192,17 @@ fun RaselDevBdApp(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.CloudSync,
-                                        contentDescription = "Headless CMS Hub",
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        imageVector = Icons.Default.CloudUpload,
+                                        contentDescription = "Post to Contentful CMA",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
                                     Text(
-                                        text = siteConfig.cmsProvider,
+                                        text = "+ Post CMA",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
                             }
@@ -260,31 +254,27 @@ fun RaselDevBdApp(
                 }
             },
             floatingActionButton = {
-                if (currentRoute != NavRoutes.ROUTE_DETAIL && currentRoute != NavRoutes.ROUTE_ADMIN) {
+                if (currentRoute != NavRoutes.ROUTE_DETAIL) {
                     ExtendedFloatingActionButton(
                         onClick = {
                             val defaultType = when (currentRoute) {
-                                NavRoutes.ROUTE_PROJECTS -> ContentType.PROJECT
+                                NavRoutes.ROUTE_BLOG -> ContentType.BLOG
                                 NavRoutes.ROUTE_PHOTOS -> ContentType.PHOTO
-                                else -> ContentType.BLOG
+                                else -> ContentType.PROJECT
                             }
-                            if (isAdminUnlocked) {
-                                viewModel.openCreateContentModal(defaultType)
-                            } else {
-                                viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
-                            }
+                            viewModel.openCreateContentModal(defaultType)
                         },
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Add,
-                                contentDescription = "Post Content"
+                                contentDescription = "Create & Post to Contentful CMA"
                             )
                         },
                         text = {
                             Text(
-                                text = if (isAdminUnlocked) "Post to CMS" else "CMS Studio",
+                                text = "Post to Contentful",
                                 fontWeight = FontWeight.Bold
                             )
                         },
@@ -337,7 +327,7 @@ fun RaselDevBdApp(
                             publishedItems = publishedItems,
                             selectedCategoryId = selectedCategoryId,
                             searchQuery = searchQuery,
-                            isAdminUnlocked = isAdminUnlocked,
+                            isAdminUnlocked = true,
                             isCmsSyncing = isCmsSyncing,
                             onSelectCategory = viewModel::selectCategory,
                             onSearchChange = viewModel::updateSearchQuery,
@@ -351,82 +341,66 @@ fun RaselDevBdApp(
                                 viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
                             },
                             onQuickCreate = { type ->
-                                if (isAdminUnlocked) {
-                                    viewModel.openCreateContentModal(type)
-                                } else {
-                                    viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
-                                }
+                                viewModel.openCreateContentModal(type)
                             }
                         )
 
                         NavRoutes.ROUTE_PROJECTS -> ContentFeedScreen(
                             contentType = ContentType.PROJECT,
-                            title = "Project Showcases",
-                            subtitle = "Production web, cloud, and Android architectures synced via ${siteConfig.cmsProvider}",
+                            title = "Project Releases & Downloads",
+                            subtitle = "Rich media project showcases with downloadable packages & Contentful CMA sync",
                             categories = categories,
                             publishedItems = publishedItems,
                             selectedCategoryId = selectedCategoryId,
                             searchQuery = searchQuery,
-                            isAdminUnlocked = isAdminUnlocked,
+                            isAdminUnlocked = true,
                             onSelectCategory = viewModel::selectCategory,
                             onSearchChange = viewModel::updateSearchQuery,
                             onOpenItem = viewModel::openContentDetail,
                             onEditItem = viewModel::openEditContentModal,
                             onPublishItemToCms = viewModel::publishItemToHeadlessCms,
                             onCreateNewOfType = {
-                                if (isAdminUnlocked) {
-                                    viewModel.openCreateContentModal(ContentType.PROJECT)
-                                } else {
-                                    viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
-                                }
+                                viewModel.openCreateContentModal(ContentType.PROJECT)
                             },
                             onBackToHome = { viewModel.navigateBack() }
                         )
 
                         NavRoutes.ROUTE_BLOG -> ContentFeedScreen(
                             contentType = ContentType.BLOG,
-                            title = "Engineering Blog",
-                            subtitle = "Articles posted via Contentful / Strapi without changing code",
+                            title = "Rich Media Articles & Guides",
+                            subtitle = "Articles with images, descriptions, and downloadable resources via Contentful CMA",
                             categories = categories,
                             publishedItems = publishedItems,
                             selectedCategoryId = selectedCategoryId,
                             searchQuery = searchQuery,
-                            isAdminUnlocked = isAdminUnlocked,
+                            isAdminUnlocked = true,
                             onSelectCategory = viewModel::selectCategory,
                             onSearchChange = viewModel::updateSearchQuery,
                             onOpenItem = viewModel::openContentDetail,
                             onEditItem = viewModel::openEditContentModal,
                             onPublishItemToCms = viewModel::publishItemToHeadlessCms,
                             onCreateNewOfType = {
-                                if (isAdminUnlocked) {
-                                    viewModel.openCreateContentModal(ContentType.BLOG)
-                                } else {
-                                    viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
-                                }
+                                viewModel.openCreateContentModal(ContentType.BLOG)
                             },
                             onBackToHome = { viewModel.navigateBack() }
                         )
 
                         NavRoutes.ROUTE_PHOTOS -> ContentFeedScreen(
                             contentType = ContentType.PHOTO,
-                            title = "Photos & Visual Stories",
-                            subtitle = "Curated photography with captions, locations, and EXIF metadata",
+                            title = "Visual Media & 4K Downloads",
+                            subtitle = "High-res photography with captions, EXIF metadata, and direct download links",
                             categories = categories,
                             publishedItems = publishedItems,
                             selectedCategoryId = selectedCategoryId,
                             searchQuery = searchQuery,
-                            isAdminUnlocked = isAdminUnlocked,
+                            isAdminUnlocked = true,
                             onSelectCategory = viewModel::selectCategory,
                             onSearchChange = viewModel::updateSearchQuery,
                             onOpenItem = viewModel::openContentDetail,
                             onEditItem = viewModel::openEditContentModal,
                             onPublishItemToCms = viewModel::publishItemToHeadlessCms,
                             onCreateNewOfType = {
-                                if (isAdminUnlocked) {
-                                    viewModel.openCreateContentModal(ContentType.PHOTO)
-                                } else {
-                                    viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
-                                }
+                                viewModel.openCreateContentModal(ContentType.PHOTO)
                             },
                             onBackToHome = { viewModel.navigateBack() }
                         )
@@ -435,6 +409,7 @@ fun RaselDevBdApp(
                             config = siteConfig,
                             categories = categories,
                             allItems = allItems,
+                            auditLogs = auditLogs,
                             isAdminUnlocked = isAdminUnlocked,
                             authError = adminAuthError,
                             activeTab = activeAdminTab,
@@ -450,8 +425,10 @@ fun RaselDevBdApp(
                             onToggleFeatured = viewModel::toggleFeaturedStatus,
                             onDeleteContent = viewModel::deleteContentItem,
                             onPublishItemToCms = viewModel::publishItemToHeadlessCms,
+                            onUnpublishItemInCms = viewModel::unpublishItemInHeadlessCms,
                             onSyncFromCms = viewModel::syncFromHeadlessCms,
-                            onSaveCmsConfig = viewModel::saveHeadlessCmsConfig,
+                            onClearAuditLogs = viewModel::clearCmaAuditLogs,
+                            onSaveCmsModelSettings = viewModel::saveHeadlessCmsModelSettings,
                             onCreateCategory = viewModel::openCreateCategoryModal,
                             onEditCategory = viewModel::openEditCategoryModal,
                             onDeleteCategory = viewModel::deleteCategory,
@@ -470,7 +447,7 @@ fun RaselDevBdApp(
 
                         NavRoutes.ROUTE_DETAIL -> ContentDetailScreen(
                             item = selectedContentItem,
-                            isAdminUnlocked = isAdminUnlocked,
+                            isAdminUnlocked = true,
                             onBack = { viewModel.navigateBack() },
                             onEdit = viewModel::openEditContentModal,
                             onPublishToCms = viewModel::publishItemToHeadlessCms,

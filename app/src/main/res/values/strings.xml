@@ -1,24 +1,24 @@
 <resources>
     <string name="app_name">Rasel Dev BD</string>
-    <string name="nav_home">Portfolio</string>
+    <string name="nav_home">Live Feed</string>
     <string name="nav_projects">Projects</string>
-    <string name="nav_blog">Blog</string>
-    <string name="nav_photos">Photos</string>
-    <string name="nav_admin">CMS Studio</string>
+    <string name="nav_blog">Articles</string>
+    <string name="nav_photos">Media</string>
+    <string name="nav_admin">Contentful CMA</string>
 
-    <string name="hero_status_badge">Headless CMS Connected • Contentful &amp; Strapi Ready</string>
-    <string name="search_placeholder">Search blogs, projects, photos, or tags…</string>
+    <string name="hero_status_badge">Contentful CMA Studio • Live Website Publisher</string>
+    <string name="search_placeholder">Search entries, descriptions, download links, or tags…</string>
     <string name="all_categories">All Categories</string>
-    <string name="featured_projects_title">Featured Project Showcases</string>
-    <string name="latest_blogs_title">Latest Engineering Articles</string>
-    <string name="photo_stories_title">Photos &amp; Visual Captions</string>
-    <string name="tech_stack_title">Core Stack &amp; Headless Architecture</string>
+    <string name="featured_projects_title">Project Releases &amp; Downloads</string>
+    <string name="latest_blogs_title">Rich Media Articles &amp; Guides</string>
+    <string name="photo_stories_title">Visual Assets &amp; High-Res Downloads</string>
+    <string name="tech_stack_title">Contentful CMA Pipeline &amp; Dynamic Categories</string>
 
-    <string name="admin_locked_title">Headless CMS &amp; Admin Studio</string>
-    <string name="admin_locked_subtitle">Unlock to post new blog articles, upload photos with captions, manage project showcases, and sync live with Contentful or Strapi without changing code.</string>
-    <string name="admin_unlock_btn">Unlock CMS Studio</string>
-    <string name="admin_lock_session">Lock Session</string>
+    <string name="admin_locked_title">Contentful Content Management Studio</string>
+    <string name="admin_locked_subtitle">Unlock to create and post rich media content—including images, descriptions, and download links—directly to Contentful via the Content Management API for immediate live website updates.</string>
+    <string name="admin_unlock_btn">Unlock CMA Studio</string>
+    <string name="admin_lock_session">Lock Studio</string>
 
-    <string name="empty_content_title">No matching content found</string>
-    <string name="empty_content_subtitle">Try selecting a different dynamic category, clearing your search filter, or syncing with Contentful / Strapi in CMS Studio.</string>
+    <string name="empty_content_title">No Contentful entries found</string>
+    <string name="empty_content_subtitle">Create a new rich media entry with images, descriptions, and download links, or sync live from Contentful CMA.</string>
 </resources>

@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
@@ -86,6 +87,10 @@ fun ContentEditorDialog(
     var summary by remember(initialItem) { mutableStateOf(initialItem.summary) }
     var markdownBody by remember(initialItem) { mutableStateOf(initialItem.markdownBody) }
     var mediaSource by remember(initialItem) { mutableStateOf(initialItem.mediaSource) }
+    var downloadUrl by remember(initialItem) { mutableStateOf(initialItem.downloadUrl) }
+    var downloadLabel by remember(initialItem) { mutableStateOf(initialItem.downloadLabel) }
+    var downloadFileSize by remember(initialItem) { mutableStateOf(initialItem.downloadFileSize) }
+    var versionTag by remember(initialItem) { mutableStateOf(initialItem.versionTag) }
     var photoCaption by remember(initialItem) { mutableStateOf(initialItem.photoCaption) }
     var photoLocation by remember(initialItem) { mutableStateOf(initialItem.photoLocation) }
     var exifCamera by remember(initialItem) { mutableStateOf(initialItem.exifCamera) }
@@ -95,7 +100,7 @@ fun ContentEditorDialog(
     var readingTime by remember(initialItem) { mutableStateOf(initialItem.readingTimeMinutes.toString()) }
     var isFeatured by remember(initialItem) { mutableStateOf(initialItem.isFeatured) }
     var isPublished by remember(initialItem) { mutableStateOf(initialItem.isPublished) }
-    var pushToCmsImmediately by remember { mutableStateOf(false) }
+    var pushToCmsImmediately by remember { mutableStateOf(true) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -149,12 +154,12 @@ fun ContentEditorDialog(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = if (initialItem.id == 0L) "Post New Content" else "Edit Content Item",
+                                    text = if (initialItem.id == 0L) "Post to Contentful CMA" else "Update Contentful Entry",
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "No-Code Publishing • Room + $activeCmsProvider CMS",
+                                    text = "Images • Descriptions • Download Links → Live Website",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -164,7 +169,7 @@ fun ContentEditorDialog(
                         Button(
                             onClick = {
                                 if (title.isBlank()) {
-                                    validationError = "Please enter a title."
+                                    validationError = "Please enter an entry title."
                                     return@Button
                                 }
                                 val finalCat = compatibleCategories.find { it.id == selectedCategoryId }
@@ -177,8 +182,12 @@ fun ContentEditorDialog(
                                         categoryId = finalCat?.id ?: 1L,
                                         categoryName = finalCat?.name ?: "General",
                                         summary = summary.trim().ifBlank { title.trim() },
-                                        markdownBody = markdownBody.trim().ifBlank { summary.trim() },
+                                        markdownBody = markdownBody.trim().ifBlank { summary.trim().ifBlank { title.trim() } },
                                         mediaSource = mediaSource.trim(),
+                                        downloadUrl = downloadUrl.trim(),
+                                        downloadLabel = downloadLabel.trim().ifBlank { "Download Asset" },
+                                        downloadFileSize = downloadFileSize.trim(),
+                                        versionTag = versionTag.trim().ifBlank { "v1.0.0" },
                                         photoCaption = photoCaption.trim(),
                                         photoLocation = photoLocation.trim(),
                                         exifCamera = exifCamera.trim(),
@@ -198,11 +207,11 @@ fun ContentEditorDialog(
                         ) {
                             Icon(
                                 imageVector = if (pushToCmsImmediately) Icons.Default.CloudUpload else Icons.Default.Save,
-                                contentDescription = "Save content",
+                                contentDescription = "Publish to Contentful CMA",
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (pushToCmsImmediately) "Publish to CMS" else "Save")
+                            Text(if (pushToCmsImmediately) "Post to CMA" else "Save Local")
                         }
                     }
                 }
@@ -230,7 +239,7 @@ fun ContentEditorDialog(
                     }
 
                     Text(
-                        text = "1. SELECT CONTENT TYPE",
+                        text = "1. SELECT ENTRY TYPE & DYNAMIC CATEGORY",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -240,9 +249,9 @@ fun ContentEditorDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         listOf(
-                            ContentType.BLOG to "Blog Post",
-                            ContentType.PROJECT to "Project Showcase",
-                            ContentType.PHOTO to "Photo + Caption"
+                            ContentType.PROJECT to "Project / Release",
+                            ContentType.BLOG to "Article / Guide",
+                            ContentType.PHOTO to "Media / Photo"
                         ).forEach { (typeKey, label) ->
                             FilterChip(
                                 selected = contentType == typeKey,
@@ -254,12 +263,6 @@ fun ContentEditorDialog(
                             )
                         }
                     }
-
-                    Text(
-                        text = "2. ASSIGN DYNAMIC CATEGORY",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
 
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -280,7 +283,7 @@ fun ContentEditorDialog(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
 
                     Text(
-                        text = "3. MEDIA UPLOAD & REMOTE CMS URL",
+                        text = "2. RICH MEDIA IMAGE & CONTENTFUL BINARY ASSET",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -309,35 +312,30 @@ fun ContentEditorDialog(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Button(
-                                    onClick = {
-                                        photoPickerLauncher.launch(
-                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                        )
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 48.dp)
-                                        .testTag("editor_pick_photo_btn")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PhotoLibrary,
-                                        contentDescription = "Pick photo from device",
-                                        modifier = Modifier.size(18.dp)
+                            Button(
+                                onClick = {
+                                    photoPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Upload Device Photo")
-                                }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("editor_pick_photo_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhotoLibrary,
+                                    contentDescription = "Pick photo from device",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Select Image from Device (Uploads to Contentful Asset API)")
                             }
 
                             Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
-                                text = "Quick Studio Presets:",
+                                text = "Or pick a Studio Media Preset:",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -368,7 +366,7 @@ fun ContentEditorDialog(
                             OutlinedTextField(
                                 value = mediaSource,
                                 onValueChange = { mediaSource = it },
-                                label = { Text("Media Source / Contentful or Strapi Asset URL") },
+                                label = { Text("Image URI / Remote Contentful Asset URL") },
                                 singleLine = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -377,8 +375,131 @@ fun ContentEditorDialog(
                         }
                     }
 
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
                     Text(
-                        text = "4. TEXT, MARKDOWN & METADATA",
+                        text = "3. DIRECT DOWNLOAD LINK & RELEASE PACKAGE",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Card(
+                        shape = MaterialTheme.shapes.medium,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(14.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Attach a downloadable file, APK, ZIP, PDF, or 4K media link",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = downloadUrl,
+                                onValueChange = { downloadUrl = it },
+                                label = { Text("Direct Download Link URL (https://...)") },
+                                placeholder = { Text("https://github.com/raseldevbd/.../releases/download/v1.0/app.apk") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("editor_download_url_input")
+                            )
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                OutlinedTextField(
+                                    value = downloadLabel,
+                                    onValueChange = { downloadLabel = it },
+                                    label = { Text("Download Button Label") },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1.6f)
+                                        .testTag("editor_download_label_input")
+                                )
+                                OutlinedTextField(
+                                    value = downloadFileSize,
+                                    onValueChange = { downloadFileSize = it },
+                                    label = { Text("File Size") },
+                                    placeholder = { Text("14.8 MB") },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("editor_download_size_input")
+                                )
+                                OutlinedTextField(
+                                    value = versionTag,
+                                    onValueChange = { versionTag = it },
+                                    label = { Text("Version") },
+                                    placeholder = { Text("v1.0.0") },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("editor_version_tag_input")
+                                )
+                            }
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                            ) {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        downloadUrl = "https://github.com/raseldevbd/raseldevbd.github.io/archive/refs/heads/main.zip"
+                                        downloadLabel = "Download Source Bundle (.ZIP)"
+                                        downloadFileSize = "14.8 MB"
+                                        versionTag = "v2.4.0"
+                                    },
+                                    label = { Text("Preset: GitHub ZIP") }
+                                )
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        downloadUrl = "https://github.com/raseldevbd/raseldevbd.github.io/releases/latest/download/rasel-dev-bd.apk"
+                                        downloadLabel = "Download Android APK"
+                                        downloadFileSize = "18.2 MB"
+                                        versionTag = "v1.0-APK"
+                                    },
+                                    label = { Text("Preset: Android APK") }
+                                )
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        downloadUrl = "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=3840&q=90"
+                                        downloadLabel = "Download 4K Media Pack"
+                                        downloadFileSize = "28.4 MB"
+                                        versionTag = "4K-UHD"
+                                    },
+                                    label = { Text("Preset: 4K Media") }
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
+                    Text(
+                        text = "4. TITLE, DESCRIPTIONS & MARKDOWN CONTENT",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -389,7 +510,7 @@ fun ContentEditorDialog(
                             title = it
                             validationError = null
                         },
-                        label = { Text("Title *") },
+                        label = { Text("Entry Title *") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -397,13 +518,23 @@ fun ContentEditorDialog(
                     )
 
                     OutlinedTextField(
-                        value = slug,
-                        onValueChange = { slug = it },
-                        label = { Text("URL Slug (auto-generated if blank)") },
-                        singleLine = true,
+                        value = summary,
+                        onValueChange = { summary = it },
+                        label = { Text("Description / Summary * (Synced to Contentful 'summary' & 'description')") },
+                        minLines = 2,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("editor_slug_input")
+                            .testTag("editor_summary_input")
+                    )
+
+                    OutlinedTextField(
+                        value = markdownBody,
+                        onValueChange = { markdownBody = it },
+                        label = { Text("Extended Rich Description / Markdown Body") },
+                        minLines = 5,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("editor_markdown_input")
                     )
 
                     if (contentType == ContentType.PHOTO) {
@@ -442,51 +573,29 @@ fun ContentEditorDialog(
                         }
                     }
 
-                    if (contentType == ContentType.PROJECT) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedTextField(
-                                value = liveDemoUrl,
-                                onValueChange = { liveDemoUrl = it },
-                                label = { Text("Live Demo URL") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("editor_live_url_input")
-                            )
-                            OutlinedTextField(
-                                value = repoUrl,
-                                onValueChange = { repoUrl = it },
-                                label = { Text("GitHub Repo URL") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("editor_repo_url_input")
-                            )
-                        }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = liveDemoUrl,
+                            onValueChange = { liveDemoUrl = it },
+                            label = { Text("Live Website URL") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("editor_live_url_input")
+                        )
+                        OutlinedTextField(
+                            value = repoUrl,
+                            onValueChange = { repoUrl = it },
+                            label = { Text("GitHub Repo URL") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("editor_repo_url_input")
+                        )
                     }
-
-                    OutlinedTextField(
-                        value = summary,
-                        onValueChange = { summary = it },
-                        label = { Text("Short Summary / Excerpt") },
-                        minLines = 2,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("editor_summary_input")
-                    )
-
-                    OutlinedTextField(
-                        value = markdownBody,
-                        onValueChange = { markdownBody = it },
-                        label = { Text("Full Markdown Content (supports ## headings, lists, and ``` code blocks)") },
-                        minLines = 6,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("editor_markdown_input")
-                    )
 
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -495,7 +604,7 @@ fun ContentEditorDialog(
                         OutlinedTextField(
                             value = techStackCsv,
                             onValueChange = { techStackCsv = it },
-                            label = { Text("Tags / Tech Stack (comma-separated)") },
+                            label = { Text("Tags / Technologies (comma-separated)") },
                             singleLine = true,
                             modifier = Modifier
                                 .weight(2f)
@@ -503,13 +612,13 @@ fun ContentEditorDialog(
                         )
 
                         OutlinedTextField(
-                            value = readingTime,
-                            onValueChange = { readingTime = it },
-                            label = { Text("Read Mins") },
+                            value = slug,
+                            onValueChange = { slug = it },
+                            label = { Text("URL Slug") },
                             singleLine = true,
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("editor_read_time_input")
+                                .testTag("editor_slug_input")
                         )
                     }
 
@@ -528,12 +637,12 @@ fun ContentEditorDialog(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Push Immediately to $activeCmsProvider CMS",
+                                        text = "Publish Directly to Contentful CMA",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(
-                                        text = "Posts directly via $activeCmsProvider REST/CMA API so your live React website updates without changing code",
+                                        text = "Dispatches POST /entries + PUT /published via Contentful Content Management API for immediate live website updates",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -557,39 +666,11 @@ fun ContentEditorDialog(
                             ) {
                                 Column {
                                     Text(
-                                        text = "Publish to Public Portfolio",
+                                        text = "Feature Entry on Live Website",
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     Text(
-                                        text = "Included in live feed and GitHub Pages JSON bundle",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = isPublished,
-                                    onCheckedChange = { isPublished = it },
-                                    modifier = Modifier.testTag("editor_publish_switch")
-                                )
-                            }
-
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 10.dp),
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                            )
-
-                            Row(
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "Feature on Portfolio Home",
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Text(
-                                        text = "Pin with a gold Featured badge at the top of feeds",
+                                        text = "Pin at the top of the live website feed",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -688,8 +769,8 @@ fun CategoryEditorDialog(
                     listOf(
                         ContentType.ALL to "All Types",
                         ContentType.PROJECT to "Projects",
-                        ContentType.BLOG to "Blogs",
-                        ContentType.PHOTO to "Photos"
+                        ContentType.BLOG to "Articles",
+                        ContentType.PHOTO to "Media"
                     ).forEach { (key, label) ->
                         FilterChip(
                             selected = scope == key,

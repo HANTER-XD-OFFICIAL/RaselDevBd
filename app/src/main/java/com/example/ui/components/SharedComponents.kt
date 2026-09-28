@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,12 +32,13 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -52,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
@@ -120,19 +124,19 @@ fun ContentTypeBadge(
 ) {
     val (label, icon, containerColor, contentColor) = when (contentType) {
         ContentType.PROJECT -> Quadruple(
-            "PROJECT SHOWCASE",
+            "PROJECT RELEASE",
             Icons.Default.Code,
             MaterialTheme.colorScheme.primaryContainer,
             MaterialTheme.colorScheme.onPrimaryContainer
         )
         ContentType.PHOTO -> Quadruple(
-            "PHOTO & CAPTION",
+            "VISUAL MEDIA",
             Icons.Default.CameraAlt,
             MaterialTheme.colorScheme.tertiaryContainer,
             MaterialTheme.colorScheme.onTertiaryContainer
         )
         else -> Quadruple(
-            "BLOG ARTICLE",
+            "ARTICLE & GUIDE",
             Icons.AutoMirrored.Filled.Article,
             MaterialTheme.colorScheme.secondaryContainer,
             MaterialTheme.colorScheme.onSecondaryContainer
@@ -168,14 +172,15 @@ fun ContentTypeBadge(
 fun CmsEntryBadge(
     cmsProvider: String,
     cmsEntryId: String,
+    cmsVersion: Int = 1,
     modifier: Modifier = Modifier
 ) {
     if (cmsProvider.isBlank() && cmsEntryId.isBlank()) return
     Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
         contentColor = MaterialTheme.colorScheme.primary,
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
         modifier = modifier
     ) {
         Row(
@@ -184,12 +189,12 @@ fun CmsEntryBadge(
         ) {
             Icon(
                 imageVector = Icons.Default.CloudDone,
-                contentDescription = "Synced with Headless CMS",
+                contentDescription = "Synced with Contentful CMA",
                 modifier = Modifier.size(12.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = cmsProvider.ifBlank { "CMS" },
+                text = "${cmsProvider.ifBlank { "CONTENTFUL" }} v$cmsVersion",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -287,10 +292,12 @@ fun ContentItemCard(
     onPublishToCmsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
     Card(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f)
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
         modifier = modifier
@@ -303,7 +310,7 @@ fun ContentItemCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (item.contentType == ContentType.PHOTO) 220.dp else 185.dp)
+                    .height(if (item.contentType == ContentType.PHOTO) 210.dp else 180.dp)
             ) {
                 PortfolioMediaImage(
                     mediaSource = item.mediaSource,
@@ -319,7 +326,7 @@ fun ContentItemCard(
                                 colors = listOf(
                                     Color.Black.copy(alpha = 0.35f),
                                     Color.Transparent,
-                                    Color.Black.copy(alpha = 0.78f)
+                                    Color.Black.copy(alpha = 0.80f)
                                 )
                             )
                         )
@@ -341,7 +348,8 @@ fun ContentItemCard(
                     ) {
                         CmsEntryBadge(
                             cmsProvider = item.cmsProvider,
-                            cmsEntryId = item.cmsEntryId
+                            cmsEntryId = item.cmsEntryId,
+                            cmsVersion = item.cmsVersion
                         )
                         if (item.isFeatured) {
                             Surface(
@@ -378,16 +386,31 @@ fun ContentItemCard(
                         .padding(12.dp)
                         .align(Alignment.BottomStart)
                 ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = item.categoryName,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = item.categoryName,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        if (item.versionTag.isNotBlank()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = item.versionTag,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
                     }
 
                     if (isAdminUnlocked) {
@@ -398,14 +421,14 @@ fun ContentItemCard(
                                     modifier = Modifier
                                         .size(48.dp)
                                         .background(
-                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
                                             CircleShape
                                         )
                                         .testTag("card_cms_push_btn_${item.id}")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.CloudUpload,
-                                        contentDescription = "Publish ${item.title} to Headless CMS",
+                                        contentDescription = "Publish ${item.title} to Contentful CMA",
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -450,40 +473,66 @@ fun ContentItemCard(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
+                Text(
+                    text = item.summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+
                 if (item.contentType == ContentType.PHOTO && item.photoCaption.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "“${item.photoCaption}”",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.tertiary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (item.photoLocation.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Photo location",
-                                tint = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = item.photoLocation,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                }
+
+                // Direct Download Link CTA right on the card!
+                if (item.downloadUrl.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(item.downloadUrl))
+                                )
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("card_download_btn_${item.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Download link",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = buildString {
+                                append(item.downloadLabel.ifBlank { "Download Asset" })
+                                if (item.downloadFileSize.isNotBlank()) {
+                                    append(" • ${item.downloadFileSize}")
+                                }
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
-                } else {
-                    Text(
-                        text = item.summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
 
                 val tags = item.techStackCsv
@@ -493,7 +542,7 @@ fun ContentItemCard(
                     .take(4)
 
                 if (tags.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -525,17 +574,13 @@ fun ContentItemCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Schedule,
-                            contentDescription = "Reading time",
+                            contentDescription = "Timestamp",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (item.contentType == ContentType.PHOTO) {
-                                formatShortDate(item.updatedAtEpoch)
-                            } else {
-                                "${item.readingTimeMinutes} min read • ${formatShortDate(item.updatedAtEpoch)}"
-                            },
+                            text = "${formatShortDate(item.updatedAtEpoch)} • CMA ${item.cmsStatus}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

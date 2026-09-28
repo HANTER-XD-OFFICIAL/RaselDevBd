@@ -37,15 +37,19 @@ import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -68,10 +72,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -94,6 +98,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.CategoryEntity
+import com.example.data.CmaAuditLogEntity
 import com.example.data.CmsProviderType
 import com.example.data.ContentItemEntity
 import com.example.data.ContentType
@@ -111,6 +116,7 @@ fun AdminDashboardScreen(
     config: SiteConfigEntity,
     categories: List<CategoryEntity>,
     allItems: List<ContentItemEntity>,
+    auditLogs: List<CmaAuditLogEntity>,
     isAdminUnlocked: Boolean,
     authError: String?,
     activeTab: AdminSubTab,
@@ -126,15 +132,15 @@ fun AdminDashboardScreen(
     onToggleFeatured: (ContentItemEntity) -> Unit,
     onDeleteContent: (ContentItemEntity) -> Unit,
     onPublishItemToCms: (ContentItemEntity) -> Unit,
+    onUnpublishItemInCms: (ContentItemEntity) -> Unit,
     onSyncFromCms: () -> Unit,
-    onSaveCmsConfig: (
+    onClearAuditLogs: () -> Unit,
+    onSaveCmsModelSettings: (
         provider: String,
-        contentfulSpaceId: String,
         contentfulEnvironment: String,
-        contentfulDeliveryToken: String,
-        contentfulManagementToken: String,
+        contentfulContentType: String,
+        contentfulLocale: String,
         strapiBaseUrl: String,
-        strapiApiToken: String,
         autoSyncOnPublish: Boolean
     ) -> Unit,
     onCreateCategory: () -> Unit,
@@ -193,13 +199,13 @@ fun AdminDashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "RASEL DEV BD • HEADLESS CMS STUDIO",
+                                text = "CONTENTFUL CMA STUDIO • RASEL DEV BD",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
                         Text(
-                            text = "${config.cmsProvider} Connected • ${allItems.count { it.isPublished }} Published • ${categories.size} Categories",
+                            text = "${allItems.count { it.isPublished }} Live Entries • ${allItems.count { it.downloadUrl.isNotBlank() }} Download Links • CMA Ready",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -213,7 +219,7 @@ fun AdminDashboardScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
-                            contentDescription = "Lock Admin Studio",
+                            contentDescription = "Lock CMA Studio",
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
@@ -229,14 +235,14 @@ fun AdminDashboardScreen(
                     Tab(
                         selected = activeTab == AdminSubTab.CONTENT,
                         onClick = { onSelectTab(AdminSubTab.CONTENT) },
-                        text = { Text("Content (${allItems.size})") },
+                        text = { Text("CMA Entries (${allItems.size})") },
                         icon = { Icon(Icons.AutoMirrored.Filled.Article, contentDescription = null) },
                         modifier = Modifier.testTag("admin_tab_content")
                     )
                     Tab(
                         selected = activeTab == AdminSubTab.HEADLESS_CMS,
                         onClick = { onSelectTab(AdminSubTab.HEADLESS_CMS) },
-                        text = { Text("Headless CMS (${config.cmsProvider})") },
+                        text = { Text("Contentful CMA Hub") },
                         icon = { Icon(Icons.Default.CloudSync, contentDescription = null) },
                         modifier = Modifier.testTag("admin_tab_headless_cms")
                     )
@@ -250,14 +256,14 @@ fun AdminDashboardScreen(
                     Tab(
                         selected = activeTab == AdminSubTab.STATIC_EXPORT,
                         onClick = { onSelectTab(AdminSubTab.STATIC_EXPORT) },
-                        text = { Text("GitHub Pages Export") },
+                        text = { Text("Live Website Code") },
                         icon = { Icon(Icons.Default.CloudDownload, contentDescription = null) },
                         modifier = Modifier.testTag("admin_tab_ssg")
                     )
                     Tab(
                         selected = activeTab == AdminSubTab.SETTINGS,
                         onClick = { onSelectTab(AdminSubTab.SETTINGS) },
-                        text = { Text("Profile & PIN") },
+                        text = { Text("Studio Settings") },
                         icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                         modifier = Modifier.testTag("admin_tab_settings")
                     )
@@ -277,16 +283,19 @@ fun AdminDashboardScreen(
                 onTogglePublish = onTogglePublish,
                 onToggleFeatured = onToggleFeatured,
                 onPublishItemToCms = onPublishItemToCms,
+                onUnpublishItemInCms = onUnpublishItemInCms,
                 onDeleteContent = onDeleteContent
             )
 
             AdminSubTab.HEADLESS_CMS -> AdminHeadlessCmsPane(
                 config = config,
                 allItems = allItems,
+                auditLogs = auditLogs,
                 isCmsSyncing = isCmsSyncing,
-                onSaveCmsConfig = onSaveCmsConfig,
+                onSaveCmsModelSettings = onSaveCmsModelSettings,
                 onSyncFromCms = onSyncFromCms,
                 onPublishItemToCms = onPublishItemToCms,
+                onClearAuditLogs = onClearAuditLogs,
                 onShowMessage = onShowMessage
             )
 
@@ -357,7 +366,7 @@ private fun AdminSecurityGate(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.Key,
-                            contentDescription = "Admin Security Key",
+                            contentDescription = "Studio Access PIN",
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(32.dp)
                         )
@@ -385,7 +394,7 @@ private fun AdminSecurityGate(
                 OutlinedTextField(
                     value = pinInput,
                     onValueChange = { pinInput = it },
-                    label = { Text("Enter Studio Security PIN") },
+                    label = { Text("Enter Studio Access PIN") },
                     placeholder = { Text("Default PIN: ${config.adminPin}") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
@@ -439,29 +448,27 @@ private fun AdminSecurityGate(
 private fun AdminHeadlessCmsPane(
     config: SiteConfigEntity,
     allItems: List<ContentItemEntity>,
+    auditLogs: List<CmaAuditLogEntity>,
     isCmsSyncing: Boolean,
-    onSaveCmsConfig: (
+    onSaveCmsModelSettings: (
         provider: String,
-        contentfulSpaceId: String,
         contentfulEnvironment: String,
-        contentfulDeliveryToken: String,
-        contentfulManagementToken: String,
+        contentfulContentType: String,
+        contentfulLocale: String,
         strapiBaseUrl: String,
-        strapiApiToken: String,
         autoSyncOnPublish: Boolean
     ) -> Unit,
     onSyncFromCms: () -> Unit,
     onPublishItemToCms: (ContentItemEntity) -> Unit,
+    onClearAuditLogs: () -> Unit,
     onShowMessage: (String) -> Unit
 ) {
     val context = LocalContext.current
     var provider by remember(config.cmsProvider) { mutableStateOf(config.cmsProvider) }
-    var contentfulSpaceId by remember(config.contentfulSpaceId) { mutableStateOf(config.contentfulSpaceId) }
     var contentfulEnv by remember(config.contentfulEnvironment) { mutableStateOf(config.contentfulEnvironment) }
-    var contentfulCdaToken by remember(config.contentfulDeliveryToken) { mutableStateOf(config.contentfulDeliveryToken) }
-    var contentfulCmaToken by remember(config.contentfulManagementToken) { mutableStateOf(config.contentfulManagementToken) }
+    var contentfulContentType by remember(config.contentfulContentType) { mutableStateOf(config.contentfulContentType) }
+    var contentfulLocale by remember(config.contentfulLocale) { mutableStateOf(config.contentfulLocale) }
     var strapiBaseUrl by remember(config.strapiBaseUrl) { mutableStateOf(config.strapiBaseUrl) }
-    var strapiApiToken by remember(config.strapiApiToken) { mutableStateOf(config.strapiApiToken) }
     var autoSyncOnPublish by remember(config.autoSyncCmsOnPublish) { mutableStateOf(config.autoSyncCmsOnPublish) }
 
     LazyColumn(
@@ -488,13 +495,13 @@ private fun AdminHeadlessCmsPane(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Headless CMS Live Integration",
+                                text = "Contentful Content Management API (CMA) Hub",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Post blogs, photos with captions, and project showcases to Contentful or Strapi without changing code.",
+                                text = "Post rich media content (images, descriptions, and download links) directly to Contentful via api.contentful.com & upload.contentful.com for immediate live website updates.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -515,21 +522,37 @@ private fun AdminHeadlessCmsPane(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudDone,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudDone,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = config.lastCmsSyncStatus,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                             Text(
-                                text = config.lastCmsSyncStatus,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = "Secrets Panel Status: " +
+                                    if (config.isContentfulCmaConfigured) {
+                                        "CONTENTFUL_SPACE_ID & CONTENTFUL_MANAGEMENT_TOKEN loaded via BuildConfig"
+                                    } else {
+                                        "Set CONTENTFUL_SPACE_ID & CONTENTFUL_MANAGEMENT_TOKEN in the AI Studio Secrets panel"
+                                    },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (config.isContentfulCmaConfigured) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.secondary
+                                }
                             )
                         }
                     }
@@ -550,7 +573,7 @@ private fun AdminHeadlessCmsPane(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CloudDownload,
-                                contentDescription = "Pull from CMS",
+                                contentDescription = "Sync from Contentful",
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -563,7 +586,7 @@ private fun AdminHeadlessCmsPane(
                                 if (firstItem != null) {
                                     onPublishItemToCms(firstItem)
                                 } else {
-                                    onShowMessage("No published item available to push.")
+                                    onShowMessage("No published entry available to push.")
                                 }
                             },
                             enabled = !isCmsSyncing,
@@ -574,11 +597,11 @@ private fun AdminHeadlessCmsPane(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CloudUpload,
-                                contentDescription = "Push to CMS",
+                                contentDescription = "Push to Contentful CMA",
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Push Latest Post")
+                            Text("Publish Latest CMA")
                         }
                     }
                 }
@@ -599,7 +622,7 @@ private fun AdminHeadlessCmsPane(
                     modifier = Modifier.padding(18.dp)
                 ) {
                     Text(
-                        text = "1. CHOOSE HEADLESS CMS PROVIDER",
+                        text = "CONTENTFUL CMA ENVIRONMENT & CONTENT-TYPE TARGET",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -611,7 +634,7 @@ private fun AdminHeadlessCmsPane(
                         FilterChip(
                             selected = provider == CmsProviderType.CONTENTFUL,
                             onClick = { provider = CmsProviderType.CONTENTFUL },
-                            label = { Text("Contentful (CDA + CMA)") },
+                            label = { Text("Contentful CMA (Primary)") },
                             modifier = Modifier
                                 .heightIn(min = 48.dp)
                                 .testTag("cms_provider_contentful_chip")
@@ -619,93 +642,59 @@ private fun AdminHeadlessCmsPane(
                         FilterChip(
                             selected = provider == CmsProviderType.STRAPI,
                             onClick = { provider = CmsProviderType.STRAPI },
-                            label = { Text("Strapi v4/v5 (REST API)") },
+                            label = { Text("Strapi REST v4/v5") },
                             modifier = Modifier
                                 .heightIn(min = 48.dp)
                                 .testTag("cms_provider_strapi_chip")
                         )
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-
                     if (provider == CmsProviderType.CONTENTFUL) {
-                        Text(
-                            text = "2. CONTENTFUL CREDENTIALS (OR CONFIGURE VIA AI STUDIO SECRETS)",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             OutlinedTextField(
-                                value = contentfulSpaceId,
-                                onValueChange = { contentfulSpaceId = it },
-                                label = { Text("Contentful Space ID") },
-                                placeholder = { Text("e.g. k8x9p2m4n1q0") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(2f)
-                                    .testTag("cms_contentful_space_input")
-                            )
-                            OutlinedTextField(
                                 value = contentfulEnv,
                                 onValueChange = { contentfulEnv = it },
-                                label = { Text("Environment") },
+                                label = { Text("Environment ID") },
                                 placeholder = { Text("master") },
                                 singleLine = true,
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("cms_contentful_env_input")
                             )
+                            OutlinedTextField(
+                                value = contentfulContentType,
+                                onValueChange = { contentfulContentType = it },
+                                label = { Text("Content-Type ID") },
+                                placeholder = { Text("portfolioItem") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1.3f)
+                                    .testTag("cms_contentful_type_input")
+                            )
+                            OutlinedTextField(
+                                value = contentfulLocale,
+                                onValueChange = { contentfulLocale = it },
+                                label = { Text("Locale") },
+                                placeholder = { Text("en-US") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("cms_contentful_locale_input")
+                            )
                         }
-
-                        OutlinedTextField(
-                            value = contentfulCdaToken,
-                            onValueChange = { contentfulCdaToken = it },
-                            label = { Text("Content Delivery API Token (CDA - Read Live Entries)") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("cms_contentful_cda_input")
-                        )
-
-                        OutlinedTextField(
-                            value = contentfulCmaToken,
-                            onValueChange = { contentfulCmaToken = it },
-                            label = { Text("Content Management API Token (CMA - Post Without Code)") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("cms_contentful_cma_input")
-                        )
                     } else {
-                        Text(
-                            text = "2. STRAPI V4/V5 REST API CREDENTIALS",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
                         OutlinedTextField(
                             value = strapiBaseUrl,
                             onValueChange = { strapiBaseUrl = it },
-                            label = { Text("Strapi Server Base URL") },
+                            label = { Text("Strapi Public Base URL") },
                             placeholder = { Text("https://cms.raseldevbd.com") },
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("cms_strapi_url_input")
-                        )
-
-                        OutlinedTextField(
-                            value = strapiApiToken,
-                            onValueChange = { strapiApiToken = it },
-                            label = { Text("Strapi API Token (Full Access / Create & Find)") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("cms_strapi_token_input")
                         )
                     }
 
@@ -716,11 +705,11 @@ private fun AdminHeadlessCmsPane(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Auto-Publish to Headless CMS on Save",
+                                text = "Auto-Publish to Contentful CMA on Save",
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "Automatically push new or edited items to $provider when saved",
+                                text = "Automatically dispatches POST /entries + PUT /published when saving rich media items",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -734,14 +723,12 @@ private fun AdminHeadlessCmsPane(
 
                     Button(
                         onClick = {
-                            onSaveCmsConfig(
+                            onSaveCmsModelSettings(
                                 provider,
-                                contentfulSpaceId,
                                 contentfulEnv,
-                                contentfulCdaToken,
-                                contentfulCmaToken,
+                                contentfulContentType,
+                                contentfulLocale,
                                 strapiBaseUrl,
-                                strapiApiToken,
                                 autoSyncOnPublish
                             )
                         },
@@ -752,64 +739,135 @@ private fun AdminHeadlessCmsPane(
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save $provider Configuration", fontWeight = FontWeight.Bold)
+                        Text("Save CMA Model Settings", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Live Contentful CMA Activity & Audit Log
+        item {
+            Card(
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Contentful CMA API Dispatch Log (${auditLogs.size})",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (auditLogs.isNotEmpty()) {
+                            TextButton(
+                                onClick = onClearAuditLogs,
+                                modifier = Modifier.testTag("cms_clear_logs_btn")
+                            ) {
+                                Text("Clear")
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (auditLogs.isEmpty()) {
+                        Text(
+                            text = "No CMA API dispatches recorded yet. Create or publish an entry to view live Contentful CMA requests.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            auditLogs.take(8).forEach { log ->
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (log.success) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                        else MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = "${log.actionType} • HTTP ${log.httpStatus}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (log.success) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.error,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = formatShortDate(log.timestampEpoch),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = log.entryTitle,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = log.message,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
         item {
-            val schemaSnippet = if (provider == CmsProviderType.CONTENTFUL) {
-                """
-// Contentful Content Type ID: "portfolioItem"
-// Endpoint: https://cdn.contentful.com/spaces/{SPACE_ID}/environments/master/entries
+            val schemaSnippet = """
+// Contentful Content Management API (CMA) Content-Type: "${config.contentfulContentType}"
+// Endpoint: POST https://api.contentful.com/spaces/{SPACE_ID}/environments/${config.contentfulEnvironment}/entries
 {
-  "name": "Portfolio Item",
+  "name": "Portfolio Rich Media Item",
   "fields": [
     { "id": "title", "type": "Symbol", "required": true },
     { "id": "slug", "type": "Symbol" },
     { "id": "contentType", "type": "Symbol" }, // PROJECT | BLOG | PHOTO
     { "id": "categoryName", "type": "Symbol" },
     { "id": "summary", "type": "Text" },
+    { "id": "description", "type": "Text" },
     { "id": "markdownBody", "type": "Text" },
     { "id": "mediaSource", "type": "Symbol" },
-    { "id": "photoCaption", "type": "Symbol" },
-    { "id": "photoLocation", "type": "Symbol" },
-    { "id": "exifCamera", "type": "Symbol" },
-    { "id": "techStackCsv", "type": "Symbol" },
-    { "id": "liveDemoUrl", "type": "Symbol" },
-    { "id": "repoUrl", "type": "Symbol" },
-    { "id": "isFeatured", "type": "Boolean" }
+    { "id": "media", "type": "Link", "linkType": "Asset" },
+    { "id": "downloadUrl", "type": "Symbol" },
+    { "id": "downloadLabel", "type": "Symbol" },
+    { "id": "downloadFileSize", "type": "Symbol" },
+    { "id": "versionTag", "type": "Symbol" }
   ]
 }
-                """.trimIndent()
-            } else {
-                """
-// Strapi Collection Type: "portfolio-item" (plural: "portfolio-items")
-// Endpoint: GET / POST {STRAPI_BASE_URL}/api/portfolio-items?populate=*
-{
-  "kind": "collectionType",
-  "collectionName": "portfolio_items",
-  "info": { "singularName": "portfolio-item", "pluralName": "portfolio-items" },
-  "attributes": {
-    "title": { "type": "string", "required": true },
-    "slug": { "type": "uid", "targetField": "title" },
-    "contentType": { "type": "enumeration", "enum": ["PROJECT", "BLOG", "PHOTO"] },
-    "categoryName": { "type": "string" },
-    "summary": { "type": "text" },
-    "markdownBody": { "type": "richtext" },
-    "mediaSource": { "type": "string" },
-    "photoCaption": { "type": "string" },
-    "photoLocation": { "type": "string" },
-    "exifCamera": { "type": "string" },
-    "techStackCsv": { "type": "string" },
-    "liveDemoUrl": { "type": "string" },
-    "repoUrl": { "type": "string" },
-    "isFeatured": { "type": "boolean", "default": false }
-  }
-}
-                """.trimIndent()
-            }
+            """.trimIndent()
 
             Card(
                 shape = MaterialTheme.shapes.large,
@@ -826,15 +884,15 @@ private fun AdminHeadlessCmsPane(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "$provider Content Model Schema",
+                            text = "Contentful CMA Rich Media Schema",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.secondary
                         )
                         IconButton(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("CMS Schema", schemaSnippet))
-                                onShowMessage("Copied $provider schema JSON to clipboard")
+                                clipboard.setPrimaryClip(ClipData.newPlainText("CMA Schema", schemaSnippet))
+                                onShowMessage("Copied Contentful CMA schema JSON to clipboard")
                             }
                         ) {
                             Icon(
@@ -869,6 +927,7 @@ private fun AdminContentManagerPane(
     onTogglePublish: (ContentItemEntity) -> Unit,
     onToggleFeatured: (ContentItemEntity) -> Unit,
     onPublishItemToCms: (ContentItemEntity) -> Unit,
+    onUnpublishItemInCms: (ContentItemEntity) -> Unit,
     onDeleteContent: (ContentItemEntity) -> Unit
 ) {
     val filtered = allItems.filter {
@@ -888,23 +947,7 @@ private fun AdminContentManagerPane(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Button(
-                    onClick = { onCreateContent(ContentType.BLOG) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("admin_new_blog_btn")
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Blog", maxLines = 1)
-                }
-
-                Button(
                     onClick = { onCreateContent(ContentType.PROJECT) },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary,
-                        contentColor = MaterialTheme.colorScheme.onSecondary
-                    ),
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)
@@ -912,7 +955,23 @@ private fun AdminContentManagerPane(
                 ) {
                     Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Project", maxLines = 1)
+                    Text("Release", maxLines = 1)
+                }
+
+                Button(
+                    onClick = { onCreateContent(ContentType.BLOG) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("admin_new_blog_btn")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Article", maxLines = 1)
                 }
 
                 Button(
@@ -928,7 +987,7 @@ private fun AdminContentManagerPane(
                 ) {
                     Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Photo", maxLines = 1)
+                    Text("Media", maxLines = 1)
                 }
             }
         }
@@ -943,8 +1002,8 @@ private fun AdminContentManagerPane(
                 listOf(
                     ContentType.ALL to "All (${allItems.size})",
                     ContentType.PROJECT to "Projects (${allItems.count { it.contentType == ContentType.PROJECT }})",
-                    ContentType.BLOG to "Blogs (${allItems.count { it.contentType == ContentType.BLOG }})",
-                    ContentType.PHOTO to "Photos (${allItems.count { it.contentType == ContentType.PHOTO }})"
+                    ContentType.BLOG to "Articles (${allItems.count { it.contentType == ContentType.BLOG }})",
+                    ContentType.PHOTO to "Media (${allItems.count { it.contentType == ContentType.PHOTO }})"
                 ).forEach { (typeKey, label) ->
                     FilterChip(
                         selected = contentFilterType == typeKey,
@@ -996,21 +1055,9 @@ private fun AdminContentManagerPane(
                                 ContentTypeBadge(contentType = item.contentType)
                                 CmsEntryBadge(
                                     cmsProvider = item.cmsProvider,
-                                    cmsEntryId = item.cmsEntryId
+                                    cmsEntryId = item.cmsEntryId,
+                                    cmsVersion = item.cmsVersion
                                 )
-                                if (!item.isPublished) {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.errorContainer,
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "DRAFT",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
                             }
 
                             Spacer(modifier = Modifier.height(4.dp))
@@ -1024,9 +1071,17 @@ private fun AdminContentManagerPane(
                             )
 
                             Text(
-                                text = "${item.categoryName} • /${item.slug} • ${formatShortDate(item.updatedAtEpoch)}",
+                                text = buildString {
+                                    append("${item.categoryName} • ")
+                                    if (item.downloadUrl.isNotBlank()) {
+                                        append("⬇ ${item.downloadLabel} (${item.downloadFileSize.ifBlank { "Link" }}) • ")
+                                    }
+                                    append(formatShortDate(item.updatedAtEpoch))
+                                },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -1042,7 +1097,28 @@ private fun AdminContentManagerPane(
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             TextButton(
-                                onClick = { onTogglePublish(item) },
+                                onClick = { onPublishItemToCms(item) },
+                                enabled = !isCmsSyncing,
+                                modifier = Modifier.testTag("admin_push_cms_${item.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudUpload,
+                                    contentDescription = "Publish to Contentful CMA",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Push CMA")
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    if (item.isPublished && item.cmsEntryId.isNotBlank()) {
+                                        onUnpublishItemInCms(item)
+                                    } else {
+                                        onTogglePublish(item)
+                                    }
+                                },
                                 modifier = Modifier.testTag("admin_toggle_pub_${item.id}")
                             ) {
                                 Icon(
@@ -1051,22 +1127,7 @@ private fun AdminContentManagerPane(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (item.isPublished) "Published" else "Draft")
-                            }
-
-                            TextButton(
-                                onClick = { onPublishItemToCms(item) },
-                                enabled = !isCmsSyncing,
-                                modifier = Modifier.testTag("admin_push_cms_${item.id}")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudUpload,
-                                    contentDescription = "Push to Headless CMS",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Push to $activeCmsProvider")
+                                Text(if (item.isPublished) "Live" else "Draft")
                             }
                         }
 
@@ -1138,7 +1199,7 @@ private fun AdminCategoryManagerPane(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Filter and organize Blogs, Photos, and Projects dynamically",
+                        text = "Organize rich media entries, articles, and downloads",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1323,19 +1384,19 @@ private fun AdminStaticExportPane(
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text(
-                        text = "GitHub Pages + Headless CMS Bundle Generator",
+                        text = "Live Website & GitHub Pages Bundle Generator",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Target Repo: ${config.githubPagesRepo} • Live URL: https://${config.customDomain} • Active CMS: ${config.cmsProvider}",
+                        text = "Target Website: https://${config.customDomain} • Contentful CMA Sync Enabled",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.secondary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Generates the React + Headless CMS files (`src/cmsClient.js`, `src/App.jsx`, `public/data/content-bundle.json`, and GitHub Actions workflow) so you can post content via Contentful or Strapi without changing code.",
+                        text = "Exports the connected React website code (`src/cmsClient.js`, `src/App.jsx`, `public/data/content-bundle.json`) with built-in support for images, descriptions, and direct download links.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1385,7 +1446,7 @@ private fun AdminStaticExportPane(
             ) {
                 listOf(
                     0 to "src/cmsClient.js",
-                    1 to "src/App.jsx (React + CMS)",
+                    1 to "src/App.jsx (React + CMA)",
                     2 to "public/data/content-bundle.json",
                     3 to "index.html",
                     4 to ".github/workflows/deploy-pages.yml"
@@ -1514,7 +1575,7 @@ private fun AdminSiteSettingsPane(
     ) {
         item {
             Text(
-                text = "Portfolio Profile & GitHub Pages Settings",
+                text = "Website Profile & Studio Settings",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -1589,7 +1650,7 @@ private fun AdminSiteSettingsPane(
                 OutlinedTextField(
                     value = customDomain,
                     onValueChange = { customDomain = it },
-                    label = { Text("Pages Domain") },
+                    label = { Text("Live Website Domain") },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
@@ -1611,7 +1672,7 @@ private fun AdminSiteSettingsPane(
                 OutlinedTextField(
                     value = adminPin,
                     onValueChange = { adminPin = it },
-                    label = { Text("Admin Studio PIN") },
+                    label = { Text("Studio Lock PIN") },
                     singleLine = true,
                     modifier = Modifier
                         .weight(1f)

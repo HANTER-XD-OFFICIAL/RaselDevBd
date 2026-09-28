@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -31,7 +34,9 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Schedule
@@ -57,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.ContentItemEntity
 import com.example.data.ContentType
@@ -87,7 +93,7 @@ fun ContentDetailScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Content item not found",
+                    text = "Contentful entry not found",
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -95,7 +101,7 @@ fun ContentDetailScreen(
                     onClick = onBack,
                     modifier = Modifier.testTag("detail_missing_back_btn")
                 ) {
-                    Text("Return to Portfolio")
+                    Text("Return to Live Feed")
                 }
             }
         }
@@ -163,8 +169,11 @@ fun ContentDetailScreen(
                                 append(item.title)
                                 append(" — Rasel Dev BD\n\n")
                                 append(item.summary)
+                                if (item.downloadUrl.isNotBlank()) {
+                                    append("\n\nDownload (${item.downloadLabel}): ${item.downloadUrl}")
+                                }
                                 if (item.liveDemoUrl.isNotBlank()) {
-                                    append("\n\nLive: ${item.liveDemoUrl}")
+                                    append("\nLive: ${item.liveDemoUrl}")
                                 }
                             }
                             val intent = Intent(Intent.ACTION_SEND).apply {
@@ -186,21 +195,21 @@ fun ContentDetailScreen(
                         )
                     }
 
-                    if (isAdminUnlocked) {
-                        IconButton(
-                            onClick = { onPublishToCms(item) },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(MaterialTheme.colorScheme.secondary, CircleShape)
-                                .testTag("detail_cms_publish_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudUpload,
-                                contentDescription = "Publish to Headless CMS",
-                                tint = MaterialTheme.colorScheme.onSecondary
-                            )
-                        }
+                    IconButton(
+                        onClick = { onPublishToCms(item) },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(MaterialTheme.colorScheme.secondary, CircleShape)
+                            .testTag("detail_cms_publish_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Publish to Contentful CMA",
+                            tint = MaterialTheme.colorScheme.onSecondary
+                        )
+                    }
 
+                    if (isAdminUnlocked) {
                         IconButton(
                             onClick = { onEdit(item) },
                             modifier = Modifier
@@ -256,7 +265,8 @@ fun ContentDetailScreen(
                     }
                     CmsEntryBadge(
                         cmsProvider = item.cmsProvider,
-                        cmsEntryId = item.cmsEntryId
+                        cmsEntryId = item.cmsEntryId,
+                        cmsVersion = item.cmsVersion
                     )
                 }
 
@@ -305,31 +315,153 @@ fun ContentDetailScreen(
                 )
             }
 
-            if (item.cmsEntryId.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
+            // Contentful CMA Sync Metadata Card
+            Spacer(modifier = Modifier.height(14.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.padding(14.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.CloudDone,
-                                contentDescription = "Headless CMS Entry",
+                                contentDescription = "Contentful CMA Entry",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Headless CMS (${item.cmsProvider.ifBlank { "CONTENTFUL" }}) • Entry ID: ${item.cmsEntryId}",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "Contentful CMA • Entry ID: ${item.cmsEntryId.ifBlank { "pending-publish" }} • v${item.cmsVersion}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        if (item.cmsAssetId.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Linked Media Asset ID: ${item.cmsAssetId} • Status: ${item.cmsStatus}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { onPublishToCms(item) },
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("detail_cma_sync_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Push to Contentful CMA",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Push CMA")
+                    }
+                }
+            }
+
+            // Direct Download Link Card (First-class requirement!)
+            if (item.downloadUrl.isNotBlank()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("detail_download_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "DIRECT DOWNLOAD & RELEASE ASSET",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = item.downloadLabel.ifBlank { "Download Asset Package" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = buildString {
+                                        if (item.versionTag.isNotBlank()) append("Release ${item.versionTag} • ")
+                                        if (item.downloadFileSize.isNotBlank()) append("${item.downloadFileSize} • ")
+                                        append(item.downloadUrl)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Download URL", item.downloadUrl))
+                                },
+                                modifier = Modifier.testTag("detail_copy_download_url_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy download URL",
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(item.downloadUrl))
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("detail_download_action_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Download now",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = buildString {
+                                    append(item.downloadLabel.ifBlank { "Download File" })
+                                    if (item.downloadFileSize.isNotBlank()) append(" (${item.downloadFileSize})")
+                                },
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -338,7 +470,9 @@ fun ContentDetailScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (item.contentType == ContentType.PHOTO) {
+            if (item.contentType == ContentType.PHOTO &&
+                (item.photoCaption.isNotBlank() || item.photoLocation.isNotBlank() || item.exifCamera.isNotBlank())
+            ) {
                 Card(
                     shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.cardColors(
@@ -398,9 +532,7 @@ fun ContentDetailScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            if (item.contentType == ContentType.PROJECT &&
-                (item.liveDemoUrl.isNotBlank() || item.repoUrl.isNotBlank())
-            ) {
+            if (item.liveDemoUrl.isNotBlank() || item.repoUrl.isNotBlank()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -421,11 +553,11 @@ fun ContentDetailScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                contentDescription = "Live Demo",
+                                contentDescription = "Live Website",
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Live Deployment")
+                            Text("Live Website")
                         }
                     }
 
@@ -449,7 +581,7 @@ fun ContentDetailScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Source Code")
+                            Text("Source Repo")
                         }
                     }
                 }
@@ -462,13 +594,21 @@ fun ContentDetailScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = item.summary,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(16.dp)
-                )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "DESCRIPTION",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = item.summary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -485,7 +625,7 @@ fun ContentDetailScreen(
             if (tags.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "TAGS & TECHNOLOGIES",
+                    text = "CONTENTFUL TAGS & METADATA",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
