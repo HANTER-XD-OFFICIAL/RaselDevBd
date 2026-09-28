@@ -9,72 +9,115 @@ class PortfolioRepository(private val dao: PortfolioDao) {
     val publishedContentItems: Flow<List<ContentItemEntity>> = dao.getPublishedContentItems()
     val siteConfig: Flow<SiteConfigEntity?> = dao.getSiteConfig()
 
-    suspend fun ensureSeeded() {
-        val existingConfig = dao.getSiteConfigOnce()
-        if (existingConfig == null) {
-            dao.saveSiteConfig(SiteConfigEntity())
+    suspend fun ensureSeedData() {
+        if (dao.getSiteConfigSnapshot() == null) {
+            dao.upsertSiteConfig(SiteConfigEntity())
         }
-        val catCount = dao.getCategoriesCount()
-        if (catCount == 0) {
-            dao.insertCategories(SeedPortfolioData.defaultCategories())
+        if (dao.getCategoryCount() == 0) {
+            dao.insertCategories(InitialSeedData.defaultCategories())
         }
-        val itemCount = dao.getContentCount()
-        if (itemCount == 0) {
-            dao.insertContentItems(SeedPortfolioData.defaultContentItems())
+        if (dao.getContentCount() == 0) {
+            dao.insertContentItems(InitialSeedData.defaultContentItems())
         }
     }
 
     suspend fun saveCategory(category: CategoryEntity): Long {
         val id = dao.insertCategory(category)
         if (category.id != 0L) {
-            dao.syncCategoryNameInItems(category.id, category.name)
+            dao.updateCategoryNameForItems(category.id, category.name)
         }
         return id
     }
 
-    suspend fun deleteCategory(categoryId: Long) {
-        dao.deleteCategoryById(categoryId)
+    suspend fun deleteCategory(category: CategoryEntity) {
+        dao.deleteCategory(category)
     }
 
     suspend fun saveContentItem(item: ContentItemEntity): Long {
-        return dao.insertContentItem(item.copy(updatedAt = System.currentTimeMillis()))
+        return dao.insertContentItem(item.copy(updatedAtEpoch = System.currentTimeMillis()))
     }
 
-    suspend fun deleteContentItem(itemId: Long) {
-        dao.deleteContentItemById(itemId)
+    suspend fun deleteContentItem(item: ContentItemEntity) {
+        dao.deleteContentItem(item)
     }
 
-    suspend fun togglePublished(itemId: Long, isPublished: Boolean) {
-        dao.setPublishedState(itemId, isPublished)
+    suspend fun updateSiteConfig(config: SiteConfigEntity) {
+        dao.upsertSiteConfig(config)
     }
 
-    suspend fun toggleFeatured(itemId: Long, isFeatured: Boolean) {
-        dao.setFeaturedState(itemId, isFeatured)
-    }
+    suspend fun syncFromHeadlessCms(): CmsSyncResult {
+        val currentConfig = dao.getSiteConfigSnapshot() ?: SiteConfigEntity()
+        val categories = dao.getAllCategoriesSnapshot()
+        val result = HeadlessCmsClient.fetchFromCms(currentConfig, categories)
 
-    suspend fun incrementLikes(itemId: Long) {
-        dao.incrementLikes(itemId)
-    }
-
-    suspend fun saveSiteConfig(config: SiteConfigEntity) {
-        dao.saveSiteConfig(config)
-    }
-
-    suspend fun importStaticBundle(jsonString: String): Result<Int> {
-        return runCatching {
-            val currentConfig = dao.getSiteConfigOnce() ?: SiteConfigEntity()
-            val parsed = StaticSiteGenerator.parseStaticJsonBundle(
-                jsonString = jsonString,
-                existingPasscode = currentConfig.adminPasscode
+        if (result.success && result.fetchedItems.isNotEmpty()) {
+            // Upsert fetched items by matching slug so local items update seamlessly
+            val existingItems = dao.getAllContentItemsSnapshot()
+            for (remote in result.fetchedItems) {
+                val match = existingItems.firstOrNull {
+                    it.slug.equals(remote.slug, ignoreCase = true) ||
+                        (remote.cmsEntryId.isNotBlank() && it.cmsEntryId == remote.cmsEntryId)
+                }
+                if (match != null) {
+                    dao.insertContentItem(remote.copy(id = match.id))
+                } else {
+                    dao.insertContentItem(remote)
+                }
+            }
+            dao.upsertSiteConfig(
+                currentConfig.copy(
+                    lastCmsSyncEpoch = System.currentTimeMillis(),
+                    lastCmsSyncStatus = result.message
+                )
             )
-            parsed.config?.let { dao.saveSiteConfig(it) }
-            if (parsed.categories.isNotEmpty()) {
-                dao.insertCategories(parsed.categories)
-            }
-            if (parsed.items.isNotEmpty()) {
-                dao.insertContentItems(parsed.items)
-            }
-            parsed.items.size
+        } else {
+            dao.upsertSiteConfig(
+                currentConfig.copy(
+                    lastCmsSyncStatus = result.message
+                )
+            )
         }
+        return result
+    }
+
+    suspend fun publishItemToHeadlessCms(item: ContentItemEntity): CmsSyncResult {
+        val currentConfig = dao.getSiteConfigSnapshot() ?: SiteConfigEntity()
+        val result = HeadlessCmsClient.publishItemToCms(currentConfig, item)
+        if (result.success) {
+            val updatedItem = item.copy(
+                cmsEntryId = result.publishedEntryId.ifBlank { item.cmsEntryId },
+                cmsProvider = currentConfig.cmsProvider,
+                cmsSyncedAt = System.currentTimeMillis(),
+                updatedAtEpoch = System.currentTimeMillis()
+            )
+            dao.insertContentItem(updatedItem)
+            dao.upsertSiteConfig(
+                currentConfig.copy(
+                    lastCmsSyncEpoch = System.currentTimeMillis(),
+                    lastCmsSyncStatus = result.message
+                )
+            )
+        }
+        return result
+    }
+
+    suspend fun importStaticBundle(bundle: ParsedStaticBundle) {
+        bundle.config?.let { dao.upsertSiteConfig(it) }
+        if (bundle.categories.isNotEmpty()) {
+            dao.deleteAllCategories()
+            dao.insertCategories(bundle.categories)
+        }
+        if (bundle.items.isNotEmpty()) {
+            dao.deleteAllContentItems()
+            dao.insertContentItems(bundle.items)
+        }
+    }
+
+    suspend fun resetToFactoryDemo() {
+        dao.deleteAllContentItems()
+        dao.deleteAllCategories()
+        dao.upsertSiteConfig(SiteConfigEntity())
+        dao.insertCategories(InitialSeedData.defaultCategories())
+        dao.insertContentItems(InitialSeedData.defaultContentItems())
     }
 }

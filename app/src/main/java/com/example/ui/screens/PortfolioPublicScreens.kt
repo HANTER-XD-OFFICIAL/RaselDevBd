@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,142 +18,140 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.CategoryEntity
 import com.example.data.ContentItemEntity
 import com.example.data.ContentType
 import com.example.data.SiteConfigEntity
-import com.example.ui.AdminTab
-import com.example.ui.AppRoutes
+import com.example.ui.AdminSubTab
+import com.example.ui.NavRoutes
 import com.example.ui.components.ContentItemCard
 import com.example.ui.components.DynamicCategoryFilterBar
-import com.example.ui.components.EmptyStatePanel
+import com.example.ui.components.PortfolioMediaImage
+import com.example.ui.components.parseHexColor
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PortfolioHomeScreen(
-    siteConfig: SiteConfigEntity,
+    config: SiteConfigEntity,
     categories: List<CategoryEntity>,
     publishedItems: List<ContentItemEntity>,
     selectedCategoryId: Long?,
     searchQuery: String,
+    isAdminUnlocked: Boolean,
+    isCmsSyncing: Boolean,
     onSelectCategory: (Long?) -> Unit,
-    onSearchQueryChange: (String) -> Unit,
-    onOpenItem: (ContentItemEntity) -> Unit,
-    onLikeItem: (Long) -> Unit,
+    onSearchChange: (String) -> Unit,
+    onOpenItem: (Long) -> Unit,
+    onEditItem: (ContentItemEntity) -> Unit,
+    onPublishItemToCms: (ContentItemEntity) -> Unit,
+    onSyncCms: () -> Unit,
     onNavigateRoute: (String) -> Unit,
-    onOpenAdminTab: (AdminTab) -> Unit,
+    onOpenCmsSettings: () -> Unit,
+    onQuickCreate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val categoryColorMap = categories.associate { it.id to it.colorHex }
-
     val filteredItems = publishedItems.filter { item ->
-        val matchesCategory = selectedCategoryId == null || item.categoryId == selectedCategoryId
+        val matchesCat = selectedCategoryId == null || item.categoryId == selectedCategoryId
         val matchesQuery = searchQuery.isBlank() ||
             item.title.contains(searchQuery, ignoreCase = true) ||
-            item.summaryOrCaption.contains(searchQuery, ignoreCase = true) ||
-            item.tagsCsv.contains(searchQuery, ignoreCase = true) ||
+            item.summary.contains(searchQuery, ignoreCase = true) ||
+            item.techStackCsv.contains(searchQuery, ignoreCase = true) ||
+            item.photoCaption.contains(searchQuery, ignoreCase = true) ||
             item.categoryName.contains(searchQuery, ignoreCase = true)
-        matchesCategory && matchesQuery
+        matchesCat && matchesQuery
     }
 
-    val projects = filteredItems.filter { it.contentType == ContentType.PROJECT }
-    val blogs = filteredItems.filter { it.contentType == ContentType.BLOG }
-    val photos = filteredItems.filter { it.contentType == ContentType.PHOTO }
-
-    val skills = siteConfig.skillsCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    val projectsCount = publishedItems.count { it.contentType == ContentType.PROJECT }
+    val blogsCount = publishedItems.count { it.contentType == ContentType.BLOG }
+    val photosCount = publishedItems.count { it.contentType == ContentType.PHOTO }
 
     LazyColumn(
+        contentPadding = PaddingValues(bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
         modifier = modifier
             .fillMaxSize()
-            .testTag("portfolio_home_list"),
-        contentPadding = PaddingValues(bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .testTag("portfolio_home_screen")
     ) {
-        // 1. Hero Developer Banner Card
         item {
             DeveloperHeroSection(
-                siteConfig = siteConfig,
-                projectsCount = publishedItems.count { it.contentType == ContentType.PROJECT },
-                blogsCount = publishedItems.count { it.contentType == ContentType.BLOG },
-                photosCount = publishedItems.count { it.contentType == ContentType.PHOTO },
+                config = config,
+                projectsCount = projectsCount,
+                blogsCount = blogsCount,
+                photosCount = photosCount,
                 categoriesCount = categories.size,
-                onOpenAdmin = {
-                    onOpenAdminTab(AdminTab.CONTENT)
-                    onNavigateRoute(AppRoutes.ROUTE_ADMIN)
-                },
-                onOpenStaticExport = {
-                    onOpenAdminTab(AdminTab.GITHUB_PAGES)
-                    onNavigateRoute(AppRoutes.ROUTE_ADMIN)
-                }
+                isCmsSyncing = isCmsSyncing,
+                onExploreProjects = { onNavigateRoute(NavRoutes.ROUTE_PROJECTS) },
+                onOpenAdmin = { onNavigateRoute(NavRoutes.ROUTE_ADMIN) },
+                onSyncCms = onSyncCms,
+                onOpenCmsSettings = onOpenCmsSettings
             )
         }
 
-        // 2. Search Bar & Dynamic Category Filter
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 OutlinedTextField(
                     value = searchQuery,
-                    onValueChange = onSearchQueryChange,
+                    onValueChange = onSearchChange,
                     placeholder = { Text(stringResource(R.string.search_placeholder)) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = MaterialTheme.colorScheme.primary
+                            contentDescription = "Search portfolio"
                         )
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(
-                                onClick = { onSearchQueryChange("") },
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("clear_search_button")
+                                onClick = { onSearchChange("") },
+                                modifier = Modifier.testTag("clear_search_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Clear,
@@ -162,175 +161,139 @@ fun PortfolioHomeScreen(
                         }
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                    ),
+                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .testTag("portfolio_search_input")
+                        .testTag("home_search_input")
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "DYNAMIC CONTENT CATEGORIES",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (selectedCategoryId != null) {
+                        TextButton(
+                            onClick = { onSelectCategory(null) },
+                            modifier = Modifier.testTag("reset_category_filter_btn")
+                        ) {
+                            Text("Show All")
+                        }
+                    }
+                }
 
                 DynamicCategoryFilterBar(
                     categories = categories,
                     selectedCategoryId = selectedCategoryId,
-                    onSelectCategory = onSelectCategory,
-                    scopeFilter = ContentType.ALL
+                    contentTypeScope = ContentType.ALL,
+                    onSelectCategory = onSelectCategory
                 )
             }
         }
 
-        if (filteredItems.isEmpty()) {
+        if (selectedCategoryId != null || searchQuery.isNotBlank()) {
             item {
-                EmptyStatePanel(
-                    title = stringResource(R.string.empty_content_title),
-                    subtitle = stringResource(R.string.empty_content_subtitle),
-                    onResetAction = {
+                SectionHeaderRow(
+                    title = "Filtered Feed (${filteredItems.size})",
+                    subtitle = "Dynamic category & live Headless CMS search results",
+                    actionLabel = "Clear Filters",
+                    onActionClick = {
                         onSelectCategory(null)
-                        onSearchQueryChange("")
+                        onSearchChange("")
                     }
+                )
+            }
+
+            item {
+                AdaptiveContentGrid(
+                    items = filteredItems,
+                    isAdminUnlocked = isAdminUnlocked,
+                    onOpenItem = onOpenItem,
+                    onEditItem = onEditItem,
+                    onPublishItemToCms = onPublishItemToCms,
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
         } else {
-            // 3. Featured Project Showcases Section
-            if (projects.isNotEmpty()) {
-                item {
-                    SectionHeaderRow(
-                        title = stringResource(R.string.featured_projects_title),
-                        badgeText = "${projects.size} Showcases",
-                        onSeeAll = { onNavigateRoute(AppRoutes.ROUTE_PROJECTS) },
-                        testTag = "see_all_projects_btn"
-                    )
-                }
-                item {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(projects, key = { it.id }) { project ->
-                            ContentItemCard(
-                                item = project,
-                                categoryColorHex = categoryColorMap[project.categoryId] ?: "#10B981",
-                                onClick = { onOpenItem(project) },
-                                onLike = { onLikeItem(project.id) },
-                                modifier = Modifier.width(320.dp)
-                            )
-                        }
-                    }
-                }
+            val featuredProjects = publishedItems.filter { it.contentType == ContentType.PROJECT }.take(4)
+            val latestBlogs = publishedItems.filter { it.contentType == ContentType.BLOG }.take(4)
+            val photoShowcase = publishedItems.filter { it.contentType == ContentType.PHOTO }.take(4)
+
+            item {
+                SectionHeaderRow(
+                    title = stringResource(R.string.featured_projects_title),
+                    subtitle = "Full-stack React, Cloud, and Android builds synced via Headless CMS",
+                    actionLabel = "All Projects ($projectsCount)",
+                    onActionClick = { onNavigateRoute(NavRoutes.ROUTE_PROJECTS) }
+                )
             }
 
-            // 4. Latest Engineering Blog Posts Section
-            if (blogs.isNotEmpty()) {
-                item {
-                    SectionHeaderRow(
-                        title = stringResource(R.string.latest_blogs_title),
-                        badgeText = "${blogs.size} Articles",
-                        onSeeAll = { onNavigateRoute(AppRoutes.ROUTE_BLOG) },
-                        testTag = "see_all_blogs_btn"
-                    )
-                }
-                items(blogs.take(3), key = { it.id }) { blog ->
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        ContentItemCard(
-                            item = blog,
-                            categoryColorHex = categoryColorMap[blog.categoryId] ?: "#06B6D4",
-                            onClick = { onOpenItem(blog) },
-                            onLike = { onLikeItem(blog.id) }
-                        )
-                    }
-                }
+            item {
+                AdaptiveContentGrid(
+                    items = featuredProjects,
+                    isAdminUnlocked = isAdminUnlocked,
+                    onOpenItem = onOpenItem,
+                    onEditItem = onEditItem,
+                    onPublishItemToCms = onPublishItemToCms,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
             }
 
-            // 5. Photos with Captions Section
-            if (photos.isNotEmpty()) {
-                item {
-                    SectionHeaderRow(
-                        title = stringResource(R.string.photo_stories_title),
-                        badgeText = "${photos.size} Captions",
-                        onSeeAll = { onNavigateRoute(AppRoutes.ROUTE_PHOTOS) },
-                        testTag = "see_all_photos_btn"
-                    )
-                }
-                item {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(photos, key = { it.id }) { photo ->
-                            ContentItemCard(
-                                item = photo,
-                                categoryColorHex = categoryColorMap[photo.categoryId] ?: "#F59E0B",
-                                onClick = { onOpenItem(photo) },
-                                onLike = { onLikeItem(photo.id) },
-                                modifier = Modifier.width(300.dp)
-                            )
-                        }
-                    }
-                }
+            item {
+                SectionHeaderRow(
+                    title = stringResource(R.string.latest_blogs_title),
+                    subtitle = "Posted dynamically via Contentful / Strapi without changing code",
+                    actionLabel = "All Articles ($blogsCount)",
+                    onActionClick = { onNavigateRoute(NavRoutes.ROUTE_BLOG) }
+                )
             }
-        }
 
-        // 6. Core Tech Stack & GitHub Pages Static Readiness Card
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Terminal,
-                            contentDescription = "Tech Stack",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = stringResource(R.string.tech_stack_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+            item {
+                AdaptiveContentGrid(
+                    items = latestBlogs,
+                    isAdminUnlocked = isAdminUnlocked,
+                    onOpenItem = onOpenItem,
+                    onEditItem = onEditItem,
+                    onPublishItemToCms = onPublishItemToCms,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
 
-                    Text(
-                        text = siteConfig.bio,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            item {
+                SectionHeaderRow(
+                    title = stringResource(R.string.photo_stories_title),
+                    subtitle = "High-res photography with captions & EXIF metadata",
+                    actionLabel = "Full Gallery ($photosCount)",
+                    onActionClick = { onNavigateRoute(NavRoutes.ROUTE_PHOTOS) }
+                )
+            }
 
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        skills.forEach { skill ->
-                            Surface(
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text(
-                                    text = skill,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+            item {
+                AdaptiveContentGrid(
+                    items = photoShowcase,
+                    isAdminUnlocked = isAdminUnlocked,
+                    onOpenItem = onOpenItem,
+                    onEditItem = onEditItem,
+                    onPublishItemToCms = onPublishItemToCms,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+
+            item {
+                TechStackAndArchitectureCard(
+                    config = config,
+                    categories = categories,
+                    onOpenAdmin = { onNavigateRoute(NavRoutes.ROUTE_ADMIN) },
+                    onQuickCreate = onQuickCreate,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
             }
         }
     }
@@ -338,202 +301,255 @@ fun PortfolioHomeScreen(
 
 @Composable
 private fun DeveloperHeroSection(
-    siteConfig: SiteConfigEntity,
+    config: SiteConfigEntity,
     projectsCount: Int,
     blogsCount: Int,
     photosCount: Int,
     categoriesCount: Int,
+    isCmsSyncing: Boolean,
+    onExploreProjects: () -> Unit,
     onOpenAdmin: () -> Unit,
-    onOpenStaticExport: () -> Unit
+    onSyncCms: () -> Unit,
+    onOpenCmsSettings: () -> Unit
 ) {
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .testTag("developer_hero_card"),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.45f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Image(
-                painter = painterResource(id = R.drawable.img_hero_banner),
-                contentDescription = "Rasel Dev BD Hero Banner",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(330.dp),
-                contentScale = ContentScale.Crop
+            .clip(MaterialTheme.shapes.extraLarge)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                shape = MaterialTheme.shapes.extraLarge
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(330.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF090E1A).copy(alpha = 0.72f),
-                                Color(0xFF090E1A).copy(alpha = 0.86f),
-                                Color(0xFF090E1A).copy(alpha = 0.96f)
-                            )
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.img_hero_banner),
+            contentDescription = "Rasel Dev BD Hero Banner",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(420.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(420.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF090E1A).copy(alpha = 0.68f),
+                            Color(0xFF090E1A).copy(alpha = 0.86f),
+                            Color(0xFF090E1A).copy(alpha = 0.97f)
                         )
                     )
-            )
+                )
+        )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        Column(
+            verticalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // Status Pill & GitHub Pages Badge
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
+                    modifier = Modifier.clickable(onClick = onOpenCmsSettings)
                 ) {
-                    Surface(
-                        color = Color(0xFF10B981).copy(alpha = 0.18f),
-                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.6f)),
-                        shape = RoundedCornerShape(50)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF10B981))
-                            )
-                            Text(
-                                text = "STATIC SSG READY • BD",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFA7F3D0),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Public,
-                            contentDescription = "Domain",
-                            tint = Color(0xFF06B6D4),
-                            modifier = Modifier.size(14.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = siteConfig.githubPagesDomain.removePrefix("https://"),
+                            text = "${config.cmsProvider} Headless CMS • Zero-Code Publishing",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFFCFFAFE)
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
 
-                // Avatar + Title + Location
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                IconButton(
+                    onClick = onSyncCms,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                            CircleShape
+                        )
+                        .testTag("hero_sync_cms_button")
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_avatar_rasel),
-                        contentDescription = "Rasel Developer Avatar",
-                        modifier = Modifier
-                            .size(68.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, Color(0xFF10B981), CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = siteConfig.siteTitle,
-                            style = MaterialTheme.typography.headlineLarge,
-                            color = Color.White
+                    if (isCmsSyncing) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
                         )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Location",
-                                tint = Color(0xFF10B981),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = "${siteConfig.location} • @${siteConfig.githubUsername}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color(0xFF94A3B8)
-                            )
-                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = "Sync Live Content from Headless CMS",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
+            }
 
-                Text(
-                    text = siteConfig.tagline,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFE2E8F0),
-                    maxLines = 2
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                PortfolioMediaImage(
+                    mediaSource = config.avatarSource,
+                    contentDescription = config.ownerName,
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
                 )
 
-                // Live Stats Strip
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = config.siteTitle,
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = "Verified Developer",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Text(
+                        text = "${config.ownerName} • ${config.ownerRole}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = "Location",
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${config.location} • ${config.customDomain}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFCBD5E1)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = config.bio,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFE2E8F0),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                HeroStatPill(
+                    value = projectsCount.toString(),
+                    label = "Projects",
+                    modifier = Modifier.weight(1f)
+                )
+                HeroStatPill(
+                    value = blogsCount.toString(),
+                    label = "Blogs",
+                    modifier = Modifier.weight(1f)
+                )
+                HeroStatPill(
+                    value = photosCount.toString(),
+                    label = "Photos",
+                    modifier = Modifier.weight(1f)
+                )
+                HeroStatPill(
+                    value = categoriesCount.toString(),
+                    label = "Categories",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Button(
+                    onClick = onExploreProjects,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("hero_explore_projects_btn")
                 ) {
-                    HeroStatPill(value = projectsCount.toString(), label = "Projects", modifier = Modifier.weight(1f))
-                    HeroStatPill(value = blogsCount.toString(), label = "Blogs", modifier = Modifier.weight(1f))
-                    HeroStatPill(value = photosCount.toString(), label = "Photos", modifier = Modifier.weight(1f))
-                    HeroStatPill(value = categoriesCount.toString(), label = "Categories", modifier = Modifier.weight(1f))
+                    Icon(
+                        imageVector = Icons.Default.Code,
+                        contentDescription = "Projects",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Showcase", fontWeight = FontWeight.Bold)
                 }
 
-                // Quick Actions Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                OutlinedButton(
+                    onClick = onOpenAdmin,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("hero_open_admin_btn")
                 ) {
-                    Button(
-                        onClick = onOpenAdmin,
-                        modifier = Modifier
-                            .weight(1f)
-                            .minimumInteractiveComponentSize()
-                            .testTag("hero_open_admin_btn"),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF10B981),
-                            contentColor = Color(0xFF022C22)
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AdminPanelSettings,
-                            contentDescription = "Admin Studio",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Admin Dashboard", style = MaterialTheme.typography.labelLarge)
-                    }
-
-                    FilledTonalButton(
-                        onClick = onOpenStaticExport,
-                        modifier = Modifier
-                            .weight(1f)
-                            .minimumInteractiveComponentSize()
-                            .testTag("hero_gh_pages_btn"),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudDownload,
-                            contentDescription = "GitHub Pages Export",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("GitHub Pages SSG", style = MaterialTheme.typography.labelLarge)
-                    }
+                    Icon(
+                        imageVector = Icons.Default.CloudSync,
+                        contentDescription = "Headless CMS Studio",
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("CMS Studio", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -547,68 +563,25 @@ private fun HeroStatPill(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = Color(0xFF1E293B).copy(alpha = 0.75f),
-        border = BorderStroke(1.dp, Color(0xFF334155)),
+        color = Color(0xFF1E293B).copy(alpha = 0.85f),
         shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, Color(0xFF334155)),
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp)
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF10B981),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFFCBD5E1)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SectionHeaderRow(
-    title: String,
-    badgeText: String,
-    onSeeAll: () -> Unit,
-    testTag: String
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = badgeText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        TextButton(
-            onClick = onSeeAll,
-            modifier = Modifier
-                .minimumInteractiveComponentSize()
-                .testTag(testTag)
-        ) {
-            Text("Explore All")
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = "Explore All",
-                modifier = Modifier.size(16.dp)
+                color = Color(0xFF94A3B8)
             )
         }
     }
@@ -623,176 +596,388 @@ fun ContentFeedScreen(
     publishedItems: List<ContentItemEntity>,
     selectedCategoryId: Long?,
     searchQuery: String,
+    isAdminUnlocked: Boolean,
     onSelectCategory: (Long?) -> Unit,
-    onSearchQueryChange: (String) -> Unit,
-    onOpenItem: (ContentItemEntity) -> Unit,
-    onLikeItem: (Long) -> Unit,
-    onQuickAddInAdmin: (String) -> Unit,
+    onSearchChange: (String) -> Unit,
+    onOpenItem: (Long) -> Unit,
+    onEditItem: (ContentItemEntity) -> Unit,
+    onPublishItemToCms: (ContentItemEntity) -> Unit,
+    onCreateNewOfType: () -> Unit,
     onBackToHome: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler(onBack = onBackToHome)
 
-    val categoryColorMap = categories.associate { it.id to it.colorHex }
     val filteredItems = publishedItems.filter { item ->
         val matchesType = item.contentType == contentType
         val matchesCat = selectedCategoryId == null || item.categoryId == selectedCategoryId
         val matchesQuery = searchQuery.isBlank() ||
             item.title.contains(searchQuery, ignoreCase = true) ||
-            item.summaryOrCaption.contains(searchQuery, ignoreCase = true) ||
-            item.tagsCsv.contains(searchQuery, ignoreCase = true) ||
-            item.categoryName.contains(searchQuery, ignoreCase = true)
+            item.summary.contains(searchQuery, ignoreCase = true) ||
+            item.photoCaption.contains(searchQuery, ignoreCase = true) ||
+            item.techStackCsv.contains(searchQuery, ignoreCase = true)
         matchesType && matchesCat && matchesQuery
     }
 
-    BoxWithConstraints(
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier
             .fillMaxSize()
             .testTag("feed_screen_${contentType.lowercase()}")
     ) {
-        val isWide = maxWidth >= 680.dp
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-                    shape = RoundedCornerShape(20.dp),
+        item {
+            Card(
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(18.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        FilledTonalButton(
-                            onClick = { onQuickAddInAdmin(contentType) },
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("feed_quick_add_${contentType.lowercase()}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Add $contentType",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Create")
-                        }
-                    }
-                }
-            }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        placeholder = { Text("Filter ${title.lowercase()} by keyword or tag…") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(
-                                    onClick = { onSearchQueryChange("") },
-                                    modifier = Modifier.minimumInteractiveComponentSize()
-                                ) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .testTag("feed_search_input")
-                    )
-
-                    DynamicCategoryFilterBar(
-                        categories = categories,
-                        selectedCategoryId = selectedCategoryId,
-                        onSelectCategory = onSelectCategory,
-                        scopeFilter = contentType
-                    )
-                }
-            }
-
-            if (filteredItems.isEmpty()) {
-                item {
-                    EmptyStatePanel(
-                        title = stringResource(R.string.empty_content_title),
-                        subtitle = stringResource(R.string.empty_content_subtitle),
-                        onResetAction = {
-                            onSelectCategory(null)
-                            onSearchQueryChange("")
-                        }
-                    )
-                }
-            } else if (isWide) {
-                val rows = filteredItems.chunked(2)
-                items(rows) { rowItems ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        rowItems.forEach { item ->
-                            ContentItemCard(
-                                item = item,
-                                categoryColorHex = categoryColorMap[item.categoryId] ?: "#10B981",
-                                onClick = { onOpenItem(item) },
-                                onLike = { onLikeItem(item.id) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (rowItems.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            } else {
-                items(filteredItems, key = { it.id }) { item ->
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        ContentItemCard(
-                            item = item,
-                            categoryColorHex = categoryColorMap[item.categoryId] ?: "#10B981",
-                            onClick = { onOpenItem(item) },
-                            onLike = { onLikeItem(item.id) }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Button(
+                        onClick = onCreateNewOfType,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("feed_add_btn_${contentType.lowercase()}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Create new",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Post New")
                     }
                 }
             }
         }
+
+        item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchChange,
+                placeholder = { Text("Filter $title by title, tag, or caption…") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search"
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchChange("") }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear search"
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("feed_search_${contentType.lowercase()}")
+            )
+        }
+
+        item {
+            DynamicCategoryFilterBar(
+                categories = categories,
+                selectedCategoryId = selectedCategoryId,
+                contentTypeScope = contentType,
+                onSelectCategory = onSelectCategory
+            )
+        }
+
+        if (filteredItems.isEmpty()) {
+            item {
+                Card(
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(28.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.empty_content_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.empty_content_subtitle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = onCreateNewOfType,
+                            modifier = Modifier.testTag("empty_state_create_btn")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Create First Entry")
+                        }
+                    }
+                }
+            }
+        } else {
+            item {
+                AdaptiveContentGrid(
+                    items = filteredItems,
+                    isAdminUnlocked = isAdminUnlocked,
+                    onOpenItem = onOpenItem,
+                    onEditItem = onEditItem,
+                    onPublishItemToCms = onPublishItemToCms
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AdaptiveContentGrid(
+    items: List<ContentItemEntity>,
+    isAdminUnlocked: Boolean,
+    onOpenItem: (Long) -> Unit,
+    onEditItem: (ContentItemEntity) -> Unit,
+    onPublishItemToCms: (ContentItemEntity) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val columns = when {
+            maxWidth >= 840.dp -> 3
+            maxWidth >= 560.dp -> 2
+            else -> 1
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            items.chunked(columns).forEach { rowItems ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    rowItems.forEach { item ->
+                        ContentItemCard(
+                            item = item,
+                            onClick = { onOpenItem(item.id) },
+                            isAdminUnlocked = isAdminUnlocked,
+                            onEditClick = { onEditItem(item) },
+                            onPublishToCmsClick = { onPublishItemToCms(item) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    repeat(columns - rowItems.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeaderRow(
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    onActionClick: () -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        TextButton(
+            onClick = onActionClick,
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .testTag("section_action_${title.take(10).lowercase().replace(" ", "_")}")
+        ) {
+            Text(
+                text = actionLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = actionLabel,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TechStackAndArchitectureCard(
+    config: SiteConfigEntity,
+    categories: List<CategoryEntity>,
+    onOpenAdmin: () -> Unit,
+    onQuickCreate: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = stringResource(R.string.tech_stack_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Active Headless CMS: ${config.cmsProvider} (${config.lastCmsSyncStatus}) • Posts, photo captions, and project showcases can be published without changing code.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                categories.forEach { cat ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, parseHexColor(cat.accentHex).copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(parseHexColor(cat.accentHex))
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${cat.name} (${cat.contentTypeScope})",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                QuickUploadActionChip(
+                    label = "+ Project",
+                    icon = Icons.Default.Code,
+                    onClick = { onQuickCreate(ContentType.PROJECT) },
+                    modifier = Modifier.weight(1f),
+                    testTag = "home_quick_add_project"
+                )
+                QuickUploadActionChip(
+                    label = "+ Blog Post",
+                    icon = Icons.AutoMirrored.Filled.Article,
+                    onClick = { onQuickCreate(ContentType.BLOG) },
+                    modifier = Modifier.weight(1f),
+                    testTag = "home_quick_add_blog"
+                )
+                QuickUploadActionChip(
+                    label = "+ Photo",
+                    icon = Icons.Default.CameraAlt,
+                    onClick = { onQuickCreate(ContentType.PHOTO) },
+                    modifier = Modifier.weight(1f),
+                    testTag = "home_quick_add_photo"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickUploadActionChip(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .testTag(testTag)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1
+        )
     }
 }

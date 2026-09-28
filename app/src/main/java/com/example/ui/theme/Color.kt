@@ -2,7 +2,6 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Cyber-Emerald & Midnight Slate Palette for "Rasel Dev BD"
 val MidnightNavy = Color(0xFF090E1A)
 val DeepSlateSurface = Color(0xFF111827)
 val ElevatedSlateCard = Color(0xFF1E293B)
@@ -21,10 +20,6 @@ val BengalCoral = Color(0xFFF43F5E)
 val BengalCoralContainer = Color(0xFF881337)
 val OnBengalCoralContainer = Color(0xFFFFE4E6)
 
-val AmberHighlight = Color(0xFFF59E0B)
-val PurpleSyntax = Color(0xFF8B5CF6)
-
-// Light mode crisp developer theme tokens
 val CrispLightBg = Color(0xFFF8FAFC)
 val CrispLightSurface = Color(0xFFFFFFFF)
 val CrispLightCard = Color(0xFFF1F5F9)

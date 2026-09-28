@@ -1,8 +1,8 @@
 package com.example
 
-import android.content.Context
-import androidx.test.core.app.ApplicationProvider
-import com.example.data.SeedPortfolioData
+import androidx.test.platform.app.InstrumentationRegistry
+import com.example.data.CmsProviderType
+import com.example.data.InitialSeedData
 import com.example.data.SiteConfigEntity
 import com.example.data.StaticSiteGenerator
 import org.junit.Assert.assertEquals
@@ -10,35 +10,34 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
 class ExampleRobolectricTest {
 
     @Test
-    fun `read app_name string from context`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val appName = context.getString(R.string.app_name)
-        assertEquals("Rasel Dev BD", appName)
-    }
+    fun verifyAppContextAndHeadlessCmsBundleExport() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assertEquals("Rasel Dev BD", context.getString(R.string.app_name))
 
-    @Test
-    fun `static site generator round trip json bundle preserves categories and items`() {
-        val config = SiteConfigEntity(siteTitle = "Rasel Dev BD")
-        val categories = SeedPortfolioData.defaultCategories()
-        val items = SeedPortfolioData.defaultContentItems()
-
-        val jsonBundle = StaticSiteGenerator.generateStaticJsonBundle(
-            config = config,
-            categories = categories,
-            publishedItems = items
+        val config = SiteConfigEntity(
+            cmsProvider = CmsProviderType.CONTENTFUL,
+            contentfulSpaceId = "demo_space_123"
         )
-        assertTrue(jsonBundle.contains("Rasel Dev BD"))
+        val categories = InitialSeedData.defaultCategories()
+        val items = InitialSeedData.defaultContentItems()
 
-        val parsed = StaticSiteGenerator.parseStaticJsonBundle(jsonBundle, "2026")
+        val jsonBundle = StaticSiteGenerator.generateStaticJsonBundle(config, categories, items)
+        assertTrue(jsonBundle.contains("Rasel Dev BD"))
+        assertTrue(jsonBundle.contains("headlessCms"))
+        assertTrue(jsonBundle.contains("demo_space_123"))
+
+        val cmsClientJs = StaticSiteGenerator.generateHeadlessCmsClientJs(config)
+        assertTrue(cmsClientJs.contains("cdn.contentful.com"))
+        assertTrue(cmsClientJs.contains("/api/portfolio-items"))
+
+        val parsed = StaticSiteGenerator.parseStaticJsonBundle(jsonBundle)
+        assertEquals("Rasel Dev BD", parsed.config?.siteTitle)
         assertEquals(categories.size, parsed.categories.size)
         assertEquals(items.size, parsed.items.size)
-        assertEquals("Rasel Dev BD", parsed.config?.siteTitle)
     }
 }

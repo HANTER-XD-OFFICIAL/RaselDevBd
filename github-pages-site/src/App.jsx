@@ -1,831 +1,924 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import {
+  getCmsConfig,
+  saveCmsConfig,
+  isCmsReadConfigured,
+  isCmsWriteConfigured,
+  fetchHeadlessCmsItems,
+  publishItemToHeadlessCms
+} from './cmsClient.js';
 
-const STORAGE_KEY = 'rasel_dev_bd_static_cms_v1';
-
-const FALLBACK_BUNDLE = {
-  schemaVersion: '1.0.0',
-  siteConfig: {
-    siteTitle: 'Rasel Dev BD',
-    tagline: 'Full-Stack React & Android Architect • Building Cloud-Native Products from Dhaka',
-    bio: "Hi, I'm Rasel — a full-stack engineer and open-source creator based in Dhaka, Bangladesh. I specialize in React 19 static/SSR architectures, TypeScript design systems, and native Android apps with Jetpack Compose.",
-    githubUsername: 'rasel-dev-bd',
-    githubPagesDomain: 'https://rasel-dev-bd.github.io',
-    email: 'alexraselchodhury@gmail.com',
-    location: 'Dhaka, Bangladesh 🇧🇩',
-    adminPasscode: '2026',
-    skills: [
-      'React 19',
-      'TypeScript',
-      'Next.js',
-      'Tailwind CSS',
-      'Kotlin',
-      'Jetpack Compose',
-      'Node.js',
-      'PostgreSQL',
-      'GitHub Actions',
-      'Docker',
-    ],
-  },
-  categories: [
-    {
-      id: 1,
-      name: 'React & Static Web',
-      slug: 'react-static-web',
-      contentTypeScope: 'ALL',
-      colorHex: '#10B981',
-      description: 'React 19, Vite, Next.js, and GitHub Pages static site architectures.',
-    },
-    {
-      id: 2,
-      name: 'Android & Kotlin',
-      slug: 'android-kotlin',
-      contentTypeScope: 'ALL',
-      colorHex: '#06B6D4',
-      description: 'Jetpack Compose, Room offline-first databases, and Material 3 apps.',
-    },
-    {
-      id: 3,
-      name: 'Cloud & DevOps',
-      slug: 'cloud-devops',
-      contentTypeScope: 'ALL',
-      colorHex: '#8B5CF6',
-      description: 'GitHub Actions CI/CD, Docker containers, edge functions, and telemetry.',
-    },
-    {
-      id: 4,
-      name: 'Dhaka Tech & Street',
-      slug: 'dhaka-tech-street',
-      contentTypeScope: 'PHOTO',
-      colorHex: '#F59E0B',
-      description: 'Visual stories, twilight architecture, and developer life across Bangladesh.',
-    },
-    {
-      id: 5,
-      name: 'System Architecture',
-      slug: 'system-architecture',
-      contentTypeScope: 'BLOG',
-      colorHex: '#F43F5E',
-      description: 'Deep-dive engineering notes on scalability, state synchronization, and UI performance.',
-    },
-  ],
-  contentItems: [
-    {
-      id: 101,
-      contentType: 'PROJECT',
-      title: 'Rasel Dev BD — Static CMS & GitHub Pages Engine',
-      slug: 'rasel-dev-bd-static-cms',
-      summaryOrCaption:
-        'Zero-backend React 19 + GitHub Pages portfolio and content platform with automated JSON bundle generation, dynamic category routing, and offline-first authoring.',
-      bodyMarkdown:
-        "## Overview\n**Rasel Dev BD Static CMS** bridges local content authoring with zero-cost static hosting on GitHub Pages (`rasel-dev-bd.github.io`).\n\n### Key Engineering Highlights\n- **Dynamic Category Taxonomy**: Manage unified or scoped categories across Projects, Blog Articles, and Photo Galleries.\n- **Deterministic Static JSON Bundle**: Compiles all published entries into `content-bundle.json`.\n\n```tsx\nexport async function loadPortfolioBundle() {\n  const res = await fetch('./data/content-bundle.json');\n  return await res.json();\n}\n```",
-      categoryId: 1,
-      categoryName: 'React & Static Web',
-      staticAssetPath:
-        'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80',
-      tags: ['React 19', 'TypeScript', 'Vite', 'GitHub Pages', 'Tailwind CSS'],
-      liveUrl: 'https://rasel-dev-bd.github.io',
-      repoUrl: 'https://github.com/rasel-dev-bd/rasel-dev-bd.github.io',
-      isFeatured: true,
-      isPublished: true,
-      likesCount: 128,
-      publishedDateIso: '2026-09-25',
-    },
-    {
-      id: 201,
-      contentType: 'BLOG',
-      title: 'Architecting a Static-First React CMS for GitHub Pages Without a Backend Server',
-      slug: 'static-first-react-cms-github-pages',
-      summaryOrCaption:
-        'How to combine an offline-capable Admin Dashboard with deterministic JSON asset generation so your portfolio scales to 100k+ views for $0/month.',
-      bodyMarkdown:
-        '## Why Static Site Generation Still Wins\nWhen hosting on **GitHub Pages**, you do not have a runtime Node.js server or SQL database executing on every request. Yet developers still want a rich **Admin Dashboard** to organize dynamic categories, write markdown blog posts, and upload project & photo galleries.',
-      categoryId: 1,
-      categoryName: 'React & Static Web',
-      staticAssetPath:
-        'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=crop&w=1200&q=80',
-      tags: ['React', 'GitHub Pages', 'SSG', 'CMS'],
-      liveUrl: '6 min read',
-      repoUrl: '/blog/static-first-react-cms-github-pages',
-      isFeatured: true,
-      isPublished: true,
-      likesCount: 142,
-      publishedDateIso: '2026-09-26',
-    },
-    {
-      id: 301,
-      contentType: 'PHOTO',
-      title: 'Blue Hour Reflections Over Hatirjheel',
-      slug: 'blue-hour-hatirjheel-dhaka',
-      summaryOrCaption:
-        "Captured just 20 minutes after sunset as the curved bridges of Hatirjheel lit up in neon cyan and emerald against Dhaka's twilight sky.",
-      bodyMarkdown:
-        '### Behind the Shot\nCaptured from the Hatirjheel overpass in Dhaka, Bangladesh.\n\n- **Location**: Hatirjheel, Dhaka\n- **Camera**: Sony A7 IV • 24mm f/1.4 GM',
-      categoryId: 4,
-      categoryName: 'Dhaka Tech & Street',
-      staticAssetPath:
-        'https://images.unsplash.com/photo-1596895111956-bf1cf0599ce5?auto=format&fit=crop&w=1200&q=80',
-      tags: ['Dhaka', 'Hatirjheel', 'Twilight', 'Bangladesh'],
-      liveUrl: 'Hatirjheel, Dhaka 🇧🇩',
-      repoUrl: '24mm • f/5.6 • 2.5s • ISO 200',
-      isFeatured: true,
-      isPublished: true,
-      likesCount: 215,
-      publishedDateIso: '2026-09-24',
-    },
-  ],
-};
-
-function toSlug(str) {
-  return (
-    (str || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') || 'item-' + Date.now()
-  );
-}
-
-function MarkdownBlocks({ markdown }) {
-  const segments = (markdown || '').split('```');
-  return (
-    <div className="space-y-4">
-      {segments.map((seg, idx) => {
-        if (idx % 2 === 1) {
-          const lines = seg.trim().split('\n');
-          const lang =
-            lines[0] && lines[0].length < 16 && !lines[0].includes(' ') ? lines[0] : 'code';
-          const code = lang !== 'code' ? lines.slice(1).join('\n') : seg.trim();
-          return (
-            <div
-              key={idx}
-              className="rounded-xl bg-[#050811] border border-slate-800 p-4 overflow-x-auto"
-            >
-              <div className="text-[11px] font-mono text-emerald-400 uppercase mb-2">{lang}</div>
-              <pre className="text-xs font-mono text-slate-200 leading-relaxed">{code}</pre>
-            </div>
-          );
-        }
-        return seg
-          .trim()
-          .split('\n\n')
-          .filter(Boolean)
-          .map((p, pIdx) => {
-            const t = p.trim();
-            if (t.startsWith('## ')) {
-              return (
-                <h3 key={pIdx} className="text-xl font-bold text-emerald-400 pt-2">
-                  {t.replace('## ', '')}
-                </h3>
-              );
-            }
-            if (t.startsWith('### ')) {
-              return (
-                <h4 key={pIdx} className="text-base font-bold text-white pt-1">
-                  {t.replace('### ', '')}
-                </h4>
-              );
-            }
-            return (
-              <p key={pIdx} className="text-slate-300 leading-relaxed whitespace-pre-line">
-                {t}
-              </p>
-            );
-          });
-      })}
-    </div>
-  );
-}
+const LOCAL_ITEMS_CACHE_KEY = 'rasel_dev_bd_items_cache_v2';
+const LOCAL_CATS_CACHE_KEY = 'rasel_dev_bd_cats_cache_v2';
 
 export default function App() {
-  const [siteConfig, setSiteConfig] = useState(FALLBACK_BUNDLE.siteConfig);
-  const [categories, setCategories] = useState(FALLBACK_BUNDLE.categories);
-  const [items, setItems] = useState(FALLBACK_BUNDLE.contentItems);
-  const [activeNav, setActiveNav] = useState('HOME');
-  const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [detailItem, setDetailItem] = useState(null);
-  const [toastMsg, setToastMsg] = useState(null);
+  const [siteConfig, setSiteConfig] = useState({
+    siteTitle: 'Rasel Dev BD',
+    tagline: 'Full-Stack React & Android Architect • Headless CMS & Open-Source Platform',
+    ownerName: 'Rasel Chowdhury',
+    ownerRole: 'Senior Full-Stack Engineer & Creative Technologist',
+    bio: 'Building resilient cloud-native web apps, native Android experiences, and headless CMS developer platforms from Dhaka, Bangladesh.',
+    location: 'Dhaka, Bangladesh',
+    email: 'alexraselchodhury@gmail.com',
+    githubUrl: 'https://github.com/raseldevbd',
+    customDomain: 'raseldevbd.github.io',
+    adminPin: '2026'
+  });
 
+  const [categories, setCategories] = useState([]);
+  const [items, setItems] = useState([]);
+  const [activeNav, setActiveNav] = useState('ALL'); // ALL, PROJECT, BLOG, PHOTO, ADMIN
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedItem, setSelectedItem] = useState(null);
+
+  // Headless CMS state
+  const [cmsConfig, setCmsConfig] = useState(() => getCmsConfig());
+  const [cmsSyncState, setCmsSyncState] = useState({
+    syncing: false,
+    badge: 'Hybrid Headless CMS Ready (Contentful & Strapi)',
+    lastMessage: 'Loaded static bundle fallback. Connect Contentful or Strapi for live no-code publishing.'
+  });
+  const [isCmsDrawerOpen, setIsCmsDrawerOpen] = useState(false);
+
+  // Admin Studio state
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [adminTab, setAdminTab] = useState('CONTENT');
-  const [editingItem, setEditingItem] = useState(null);
-  const [editingCategory, setEditingCategory] = useState(null);
+  const [pinError, setPinError] = useState('');
+  const [toastMessage, setToastMessage] = useState(null);
 
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3800);
-  };
+  // Post Composer state (No-code publishing to Contentful / Strapi + instant feed update)
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [draft, setDraft] = useState({
+    title: '',
+    slug: '',
+    contentType: 'BLOG',
+    categoryName: 'React & Headless CMS',
+    summary: '',
+    markdownBody: '',
+    mediaUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80',
+    photoCaption: '',
+    photoLocation: 'Dhaka, Bangladesh',
+    exifCamera: 'Sony A7 IV • 24mm f/1.4 GM',
+    techStackCsv: 'React,Contentful,Strapi,GitHub Pages',
+    liveDemoUrl: '',
+    repoUrl: '',
+    readingTimeMinutes: 5,
+    isFeatured: true,
+    publishToRemoteCms: true
+  });
 
   useEffect(() => {
-    const cached = localStorage.getItem(STORAGE_KEY);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed.siteConfig) setSiteConfig({ adminPasscode: '2026', ...parsed.siteConfig });
-        if (Array.isArray(parsed.categories)) setCategories(parsed.categories);
-        if (Array.isArray(parsed.contentItems)) setItems(parsed.contentItems);
-        return;
-      } catch (e) {}
-    }
     fetch('./data/content-bundle.json')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.siteConfig) setSiteConfig({ adminPasscode: '2026', ...data.siteConfig });
-        if (Array.isArray(data.categories)) setCategories(data.categories);
-        if (Array.isArray(data.contentItems)) setItems(data.contentItems);
+      .then((res) => res.json())
+      .then((bundle) => {
+        if (bundle.siteConfig) setSiteConfig((prev) => ({ ...prev, ...bundle.siteConfig }));
+        const cachedCats = localStorage.getItem(LOCAL_CATS_CACHE_KEY);
+        const cachedItems = localStorage.getItem(LOCAL_ITEMS_CACHE_KEY);
+        const initialCats = cachedCats ? JSON.parse(cachedCats) : bundle.categories || [];
+        const initialItems = cachedItems ? JSON.parse(cachedItems) : bundle.items || [];
+        setCategories(initialCats);
+        setItems(initialItems);
+
+        const cfg = getCmsConfig();
+        if (isCmsReadConfigured(cfg)) {
+          handleLiveCmsSync(cfg, initialItems);
+        }
       })
       .catch(() => {});
   }, []);
 
-  const persistToStorage = (nextConfig, nextCategories, nextItems) => {
-    const payload = {
-      schemaVersion: '1.0.0',
-      generatedAt: new Date().toISOString(),
-      siteConfig: nextConfig,
-      categories: nextCategories,
-      contentItems: nextItems,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload, null, 2));
-  };
+  function showToast(msg) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4500);
+  }
 
-  const publishedItems = useMemo(
-    () => items.filter((i) => i.isPublished !== false),
-    [items]
-  );
-
-  const filteredItems = useMemo(() => {
-    return publishedItems.filter((item) => {
-      const matchesType =
-        activeNav === 'HOME' || activeNav === 'ADMIN' || item.contentType === activeNav;
-      const matchesCat =
-        selectedCategoryId === null || Number(item.categoryId) === Number(selectedCategoryId);
-      const q = searchQuery.toLowerCase();
-      const matchesQuery =
-        !q ||
-        (item.title || '').toLowerCase().includes(q) ||
-        (item.summaryOrCaption || '').toLowerCase().includes(q) ||
-        (item.categoryName || '').toLowerCase().includes(q) ||
-        (item.tags || []).some((t) => t.toLowerCase().includes(q));
-      return matchesType && matchesCat && matchesQuery;
-    });
-  }, [publishedItems, activeNav, selectedCategoryId, searchQuery]);
-
-  const handleLike = (id, e) => {
-    if (e) e.stopPropagation();
-    const next = items.map((item) =>
-      item.id === id ? { ...item, likesCount: (item.likesCount || 0) + 1 } : item
-    );
-    setItems(next);
-    if (detailItem && detailItem.id === id) {
-      setDetailItem({ ...detailItem, likesCount: (detailItem.likesCount || 0) + 1 });
+  async function handleLiveCmsSync(cfgOverride, baseItems = items) {
+    const cfg = cfgOverride || cmsConfig;
+    if (!isCmsReadConfigured(cfg)) {
+      setIsCmsDrawerOpen(true);
+      showToast(`Configure ${cfg.provider} credentials to pull live cloud entries.`);
+      return;
     }
-    persistToStorage(siteConfig, categories, next);
-  };
 
-  const handleDownloadStaticBundle = () => {
-    const bundleObj = {
-      schemaVersion: '1.0.0',
-      generator: 'Rasel Dev BD Static Site Engine (GitHub Pages Compatible)',
-      generatedAt: new Date().toISOString(),
-      siteConfig,
-      categories,
-      contentItems: publishedItems,
-    };
-    const blob = new Blob([JSON.stringify(bundleObj, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'content-bundle.json';
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('Downloaded content-bundle.json for GitHub Pages!');
-  };
+    try {
+      setCmsSyncState((prev) => ({
+        ...prev,
+        syncing: true,
+        badge: `Syncing ${cfg.provider}...`
+      }));
+      const remoteItems = await fetchHeadlessCmsItems(cfg);
+      if (remoteItems.length > 0) {
+        // Merge remote CMS entries with local items by slug
+        const mergedMap = new Map();
+        remoteItems.forEach((r) => mergedMap.set(r.slug, r));
+        baseItems.forEach((loc) => {
+          if (!mergedMap.has(loc.slug)) mergedMap.set(loc.slug, loc);
+        });
+        const mergedList = Array.from(mergedMap.values());
+        setItems(mergedList);
+        localStorage.setItem(LOCAL_ITEMS_CACHE_KEY, JSON.stringify(mergedList));
+      }
+      setCmsSyncState({
+        syncing: false,
+        badge: `${cfg.provider} Live (${remoteItems.length} cloud entries)`,
+        lastMessage: `Synced ${remoteItems.length} live entries from ${cfg.provider} at ${new Date().toLocaleTimeString()}`
+      });
+      showToast(`Synced ${remoteItems.length} entries from ${cfg.provider} Headless CMS!`);
+    } catch (err) {
+      setCmsSyncState({
+        syncing: false,
+        badge: `${cfg.provider} Offline Fallback`,
+        lastMessage: err.message
+      });
+      showToast(`CMS Sync Notice: ${err.message}`);
+    }
+  }
 
-  const handleSaveContentItem = (e) => {
+  async function handleCreatePost(e) {
     e.preventDefault();
-    const catObj =
-      categories.find((c) => Number(c.id) === Number(editingItem.categoryId)) || categories[0];
-    const finalItem = {
-      ...editingItem,
-      id: editingItem.id || Date.now(),
-      slug: toSlug(editingItem.slug || editingItem.title),
-      categoryId: catObj ? catObj.id : 1,
-      categoryName: catObj ? catObj.name : 'General',
-      tags:
-        typeof editingItem.tags === 'string'
-          ? editingItem.tags
-              .split(',')
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : editingItem.tags || [],
-      publishedDateIso: editingItem.publishedDateIso || new Date().toISOString().slice(0, 10),
-    };
-    const exists = items.some((i) => i.id === finalItem.id);
-    const next = exists
-      ? items.map((i) => (i.id === finalItem.id ? finalItem : i))
-      : [finalItem, ...items];
-    setItems(next);
-    persistToStorage(siteConfig, categories, next);
-    setEditingItem(null);
-    showToast(`Saved "${finalItem.title}" (${finalItem.contentType})`);
-  };
+    if (!draft.title.trim()) {
+      showToast('Please enter a post title.');
+      return;
+    }
 
-  const handleSaveCategory = (e) => {
-    e.preventDefault();
-    const finalCat = {
-      ...editingCategory,
-      id: editingCategory.id || Date.now(),
-      slug: toSlug(editingCategory.slug || editingCategory.name),
-    };
-    const exists = categories.some((c) => c.id === finalCat.id);
-    const nextCats = exists
-      ? categories.map((c) => (c.id === finalCat.id ? finalCat : c))
-      : [...categories, finalCat];
-    const nextItems = items.map((item) =>
-      Number(item.categoryId) === Number(finalCat.id)
-        ? { ...item, categoryName: finalCat.name }
-        : item
-    );
-    setCategories(nextCats);
-    setItems(nextItems);
-    persistToStorage(siteConfig, nextCats, nextItems);
-    setEditingCategory(null);
-    showToast(`Saved category "${finalCat.name}"`);
-  };
+    const cleanSlug =
+      draft.slug.trim() ||
+      draft.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
 
-  const handlePhotoUploadFile = (e) => {
+    const newItem = {
+      id: `item-${Date.now()}`,
+      title: draft.title.trim(),
+      slug: cleanSlug,
+      contentType: draft.contentType,
+      categoryId: 1,
+      categoryName: draft.categoryName,
+      summary: draft.summary.trim() || draft.title.trim(),
+      markdownBody: draft.markdownBody.trim() || draft.summary.trim(),
+      mediaUrl: draft.mediaUrl.trim(),
+      photoCaption: draft.photoCaption.trim(),
+      photoLocation: draft.photoLocation.trim(),
+      exifCamera: draft.exifCamera.trim(),
+      techStack: draft.techStackCsv
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
+      liveDemoUrl: draft.liveDemoUrl.trim(),
+      repoUrl: draft.repoUrl.trim(),
+      readingTimeMinutes: Number(draft.readingTimeMinutes || 5),
+      isFeatured: Boolean(draft.isFeatured),
+      isPublished: true,
+      updatedAtEpoch: Date.now(),
+      cmsProvider: cmsConfig.provider,
+      cmsEntryId: ''
+    };
+
+    if (draft.publishToRemoteCms && isCmsWriteConfigured(cmsConfig)) {
+      try {
+        setCmsSyncState((p) => ({ ...p, syncing: true }));
+        const pubResult = await publishItemToHeadlessCms(newItem, cmsConfig);
+        newItem.cmsEntryId = pubResult.entryId;
+        newItem.cmsProvider = pubResult.provider;
+        showToast(`Published '${newItem.title}' directly to ${pubResult.provider} CMS!`);
+      } catch (err) {
+        showToast(`Saved locally; ${cmsConfig.provider} remote push returned: ${err.message}`);
+      } finally {
+        setCmsSyncState((p) => ({ ...p, syncing: false }));
+      }
+    } else {
+      showToast(`Published '${newItem.title}' to feed! Connect ${cmsConfig.provider} CMA/API token for cloud push.`);
+    }
+
+    const updated = [newItem, ...items];
+    setItems(updated);
+    localStorage.setItem(LOCAL_ITEMS_CACHE_KEY, JSON.stringify(updated));
+    setComposerOpen(false);
+  }
+
+  function handleMediaFileUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      setEditingItem({
-        ...editingItem,
-        staticAssetPath: reader.result,
-        mediaSource: reader.result,
-      });
-      showToast('Uploaded image converted for static hosting!');
+      if (typeof reader.result === 'string') {
+        setDraft((prev) => ({ ...prev, mediaUrl: reader.result }));
+      }
     };
     reader.readAsDataURL(file);
-  };
+  }
+
+  function handleSaveCmsSettings(e) {
+    e.preventDefault();
+    saveCmsConfig(cmsConfig);
+    setIsCmsDrawerOpen(false);
+    showToast(`Saved ${cmsConfig.provider} Headless CMS settings!`);
+    if (isCmsReadConfigured(cmsConfig)) {
+      handleLiveCmsSync(cmsConfig);
+    }
+  }
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesType =
+        activeNav === 'ALL' || activeNav === 'ADMIN' || item.contentType === activeNav;
+      const matchesCat =
+        selectedCategory === 'ALL' || item.categoryName === selectedCategory;
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        item.title.toLowerCase().includes(q) ||
+        (item.summary || '').toLowerCase().includes(q) ||
+        (item.photoCaption || '').toLowerCase().includes(q) ||
+        (item.techStack || []).some((t) => t.toLowerCase().includes(q));
+      return matchesType && matchesCat && matchesSearch;
+    });
+  }, [items, activeNav, selectedCategory, searchQuery]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#090E1A] text-slate-100">
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-[#090E1A]/90 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+    <div className="min-h-screen bg-[#090E1A] text-slate-100 flex flex-col">
+      {/* Top Toast Banner */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-md bg-emerald-950/95 border border-emerald-400 text-emerald-100 px-4 py-3 rounded-xl shadow-2xl flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">{toastMessage}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="text-xs font-mono text-emerald-300 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Navigation Header */}
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-[#090E1A]/90 border-b border-slate-800/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
           <div
             onClick={() => {
-              setActiveNav('HOME');
-              setDetailItem(null);
+              setSelectedItem(null);
+              setActiveNav('ALL');
             }}
             className="flex items-center gap-3 cursor-pointer"
           >
-            <span className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/50 text-emerald-400 font-mono font-bold text-sm">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-slate-950 font-mono font-bold text-lg shadow-lg shadow-emerald-500/20">
               &lt;R/&gt;
-            </span>
+            </div>
             <div>
-              <h1 className="font-bold text-lg tracking-tight text-white">{siteConfig.siteTitle}</h1>
-              <p className="text-[11px] font-mono text-emerald-400">
-                {isAdminUnlocked
-                  ? 'Admin Studio Unlocked • SSG Ready'
-                  : 'Developer Portfolio & Content Platform'}
-              </p>
+              <div className="flex items-center gap-2">
+                <span className="font-display font-bold text-lg tracking-tight text-white">
+                  {siteConfig.siteTitle}
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-mono uppercase rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  {cmsConfig.provider} CMS
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 hidden sm:block">{siteConfig.ownerName} • {siteConfig.location}</p>
             </div>
           </div>
 
           <nav className="flex items-center gap-1.5 flex-wrap">
             {[
-              { id: 'HOME', label: 'Portfolio' },
+              { id: 'ALL', label: 'Portfolio' },
               { id: 'PROJECT', label: 'Projects' },
               { id: 'BLOG', label: 'Blog' },
               { id: 'PHOTO', label: 'Photos' },
-              { id: 'ADMIN', label: isAdminUnlocked ? 'Admin Studio (Unlocked)' : 'Admin Dashboard' },
+              { id: 'ADMIN', label: 'CMS Studio' }
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => {
+                  setSelectedItem(null);
                   setActiveNav(tab.id);
-                  setDetailItem(null);
                 }}
-                className={`px-3.5 py-2 rounded-xl text-xs font-mono transition ${
+                className={`px-3.5 py-2 rounded-lg text-xs font-mono transition ${
                   activeNav === tab.id
-                    ? 'bg-emerald-500 text-slate-950 font-bold shadow-lg shadow-emerald-500/20'
-                    : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+                    ? 'bg-emerald-500 text-slate-950 font-bold'
+                    : 'text-slate-300 hover:bg-slate-800/70'
                 }`}
               >
                 {tab.label}
               </button>
             ))}
           </nav>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleLiveCmsSync()}
+              className="px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-mono text-cyan-300 flex items-center gap-1.5"
+            >
+              <span>↻</span>
+              <span>{cmsSyncState.syncing ? 'Syncing...' : 'Sync CMS'}</span>
+            </button>
+            <button
+              onClick={() => setIsCmsDrawerOpen(true)}
+              className="px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-emerald-500/40 text-xs font-mono text-emerald-300"
+            >
+              CMS Config
+            </button>
+            <button
+              onClick={() => setComposerOpen(true)}
+              className="px-3.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs shadow-lg shadow-emerald-500/20"
+            >
+              + Post Content
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
-        {detailItem ? (
+      {/* Main Content */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+        {selectedItem ? (
           <div className="max-w-3xl mx-auto bg-[#111827] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
             <div className="relative h-72 sm:h-96 bg-slate-900">
               <img
-                src={detailItem.staticAssetPath || detailItem.mediaSource}
-                alt={detailItem.title}
+                src={selectedItem.mediaUrl}
+                alt={selectedItem.title}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#090E1A] via-[#090E1A]/40 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#111827] via-transparent to-black/50" />
               <button
-                onClick={() => setDetailItem(null)}
-                className="absolute top-4 left-4 px-4 py-2 rounded-xl bg-slate-950/80 border border-slate-700 text-xs font-mono text-white hover:border-emerald-400"
+                onClick={() => setSelectedItem(null)}
+                className="absolute top-4 left-4 px-3.5 py-2 rounded-full bg-black/70 hover:bg-black text-white text-xs font-mono"
               >
-                ← Back
+                ← Back to Feed
               </button>
-              <div className="absolute bottom-5 left-6 right-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2.5 py-1 rounded-md bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 font-mono text-xs font-bold">
-                    {detailItem.contentType}
+              <div className="absolute bottom-4 left-6 right-6">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className="px-2.5 py-1 rounded-md bg-emerald-500 text-slate-950 font-mono font-bold text-xs">
+                    {selectedItem.contentType}
                   </span>
-                  <span className="px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-700 text-cyan-300 font-mono text-xs">
-                    {detailItem.categoryName}
+                  <span className="px-2.5 py-1 rounded-md bg-slate-900/90 text-cyan-300 font-mono text-xs">
+                    {selectedItem.categoryName}
                   </span>
+                  {selectedItem.cmsProvider && (
+                    <span className="px-2.5 py-1 rounded-md bg-slate-900/90 border border-emerald-500/40 text-emerald-300 font-mono text-xs">
+                      Synced via {selectedItem.cmsProvider}
+                    </span>
+                  )}
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white">{detailItem.title}</h2>
+                <h1 className="text-2xl sm:text-3xl font-display font-bold text-white">
+                  {selectedItem.title}
+                </h1>
               </div>
             </div>
 
             <div className="p-6 sm:p-8 space-y-6">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-                <div className="text-xs font-mono text-slate-400">
-                  Published {(detailItem.publishedDateIso || '').slice(0, 10)} • /
-                  {detailItem.contentType.toLowerCase()}/{detailItem.slug}
+              {selectedItem.photoCaption && (
+                <blockquote className="p-4 rounded-xl bg-slate-900/90 border-l-4 border-rose-500 italic text-slate-200">
+                  “{selectedItem.photoCaption}”
+                  {selectedItem.photoLocation && (
+                    <div className="not-italic text-xs font-mono text-slate-400 mt-1">
+                      📍 {selectedItem.photoLocation} {selectedItem.exifCamera ? `• 📷 ${selectedItem.exifCamera}` : ''}
+                    </div>
+                  )}
+                </blockquote>
+              )}
+
+              <p className="text-base text-slate-200 font-medium leading-relaxed">
+                {selectedItem.summary}
+              </p>
+
+              <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-line leading-relaxed border-t border-slate-800 pt-6">
+                {selectedItem.markdownBody}
+              </div>
+
+              {(selectedItem.liveDemoUrl || selectedItem.repoUrl) && (
+                <div className="flex flex-wrap gap-3 pt-4">
+                  {selectedItem.liveDemoUrl && (
+                    <a
+                      href={selectedItem.liveDemoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-semibold text-sm"
+                    >
+                      Live Deployment ↗
+                    </a>
+                  )}
+                  {selectedItem.repoUrl && (
+                    <a
+                      href={selectedItem.repoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2.5 rounded-xl border border-slate-700 hover:border-cyan-400 text-slate-200 text-sm font-mono"
+                    >
+                      Source Repository
+                    </a>
+                  )}
                 </div>
-                <button
-                  onClick={(e) => handleLike(detailItem.id, e)}
-                  className="px-4 py-2 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs font-mono font-bold hover:bg-rose-500/25"
-                >
-                  ♥ {detailItem.likesCount || 0} Appreciations
-                </button>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-900/90 border border-emerald-500/30">
-                <p className="text-slate-200 leading-relaxed">{detailItem.summaryOrCaption}</p>
-              </div>
-
-              <MarkdownBlocks markdown={detailItem.bodyMarkdown} />
+              )}
             </div>
           </div>
         ) : activeNav === 'ADMIN' ? (
-          !isAdminUnlocked ? (
-            <div className="max-w-md mx-auto my-12 p-8 rounded-3xl bg-[#111827] border border-emerald-500/40 shadow-2xl text-center space-y-5">
-              <h2 className="text-2xl font-bold">Admin Studio Security</h2>
-              <p className="text-sm text-slate-400">
-                Enter your admin passcode to manage dynamic categories, blog posts, photo uploads,
-                project showcases, and GitHub Pages static exports.
-              </p>
-              <input
-                type="password"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                placeholder="Enter Admin Passcode"
-                className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-center font-mono text-white"
-              />
-              <button
-                onClick={() => {
-                  if (pinInput.trim() === (siteConfig.adminPasscode || '2026')) {
-                    setIsAdminUnlocked(true);
-                    showToast('Admin Studio unlocked!');
-                  } else {
-                    showToast('Invalid PIN! Default PIN is ' + (siteConfig.adminPasscode || '2026'));
-                  }
-                }}
-                className="w-full py-3 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-sm"
-              >
-                Unlock Admin Studio
-              </button>
-              <button
-                onClick={() => {
-                  setPinInput(siteConfig.adminPasscode || '2026');
-                  setIsAdminUnlocked(true);
-                  showToast('Unlocked with default PIN (2026)');
-                }}
-                className="w-full py-2.5 rounded-xl bg-slate-800 text-slate-300 font-mono text-xs"
-              >
-                Quick Auto-Fill & Unlock (PIN: {siteConfig.adminPasscode || '2026'})
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="p-6 rounded-3xl bg-[#111827] border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <span className="text-xs font-mono text-emerald-400 uppercase font-bold">
-                    ● Admin Studio Active
-                  </span>
-                  <h2 className="text-2xl font-bold">Content & Static Site Manager</h2>
+          <div className="max-w-4xl mx-auto space-y-6">
+            {!isAdminUnlocked ? (
+              <div className="max-w-md mx-auto bg-[#111827] border border-slate-800 rounded-3xl p-8 text-center space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 font-mono text-xl">
+                  🔒
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <h2 className="text-xl font-display font-bold text-white">
+                  Unlock Headless CMS Studio
+                </h2>
+                <p className="text-sm text-slate-400">
+                  Post blog articles, photos with captions, and project showcases directly to Contentful or Strapi without changing code.
+                </p>
+                <input
+                  type="password"
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value)}
+                  placeholder="Enter Studio PIN (Default: 2026)"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-center font-mono text-white"
+                />
+                {pinError && <p className="text-xs text-rose-400">{pinError}</p>}
+                <div className="flex gap-2">
                   <button
-                    onClick={handleDownloadStaticBundle}
-                    className="px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-xs"
+                    onClick={() => {
+                      if (pinInput === siteConfig.adminPin || pinInput === '2026') {
+                        setIsAdminUnlocked(true);
+                        setPinError('');
+                      } else {
+                        setPinError('Incorrect PIN. Use 2026.');
+                      }
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm"
                   >
-                    ⬇ Export content-bundle.json
+                    Unlock Studio
                   </button>
                   <button
-                    onClick={() => setIsAdminUnlocked(false)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-mono text-xs"
+                    onClick={() => setIsAdminUnlocked(true)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-700 text-xs font-mono text-cyan-300"
                   >
-                    Lock Session
+                    Demo Unlock
                   </button>
                 </div>
               </div>
+            ) : (
+              <div className="bg-[#111827] border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                  <div>
+                    <span className="text-xs font-mono text-emerald-400 uppercase">
+                      No-Code Headless CMS Publisher
+                    </span>
+                    <h2 className="text-2xl font-display font-bold text-white">
+                      Rasel Dev BD • Admin Dashboard
+                    </h2>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setComposerOpen(true)}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs"
+                    >
+                      + New Post / Photo / Project
+                    </button>
+                    <button
+                      onClick={() => setIsCmsDrawerOpen(true)}
+                      className="px-4 py-2 rounded-xl border border-cyan-500/40 text-cyan-300 text-xs font-mono"
+                    >
+                      Configure {cmsConfig.provider}
+                    </button>
+                  </div>
+                </div>
 
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {[
-                  { id: 'CONTENT', label: `Content Items (${items.length})` },
-                  { id: 'CATEGORIES', label: `Dynamic Categories (${categories.length})` },
-                ].map((t) => (
+                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs font-mono text-slate-300 flex flex-wrap items-center justify-between gap-2">
+                  <span>Status: {cmsSyncState.lastMessage}</span>
                   <button
-                    key={t.id}
-                    onClick={() => setAdminTab(t.id)}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-mono shrink-0 ${
-                      adminTab === t.id
-                        ? 'bg-cyan-500 text-slate-950 font-bold'
-                        : 'bg-slate-900 text-slate-300 border border-slate-800'
+                    onClick={() => handleLiveCmsSync()}
+                    className="text-emerald-400 hover:underline"
+                  >
+                    Pull Latest from {cmsConfig.provider} →
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <div
+                      key={item.id || item.slug}
+                      className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-wrap items-center justify-between gap-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={item.mediaUrl}
+                          alt={item.title}
+                          className="w-14 h-14 rounded-xl object-cover"
+                        />
+                        <div>
+                          <div className="flex items-center gap-2 text-[11px] font-mono">
+                            <span className="text-emerald-400">{item.contentType}</span>
+                            <span className="text-slate-500">•</span>
+                            <span className="text-cyan-300">{item.categoryName}</span>
+                          </div>
+                          <h3 className="font-bold text-white">{item.title}</h3>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await publishItemToHeadlessCms(item, cmsConfig);
+                              showToast(`Synced '${item.title}' to ${res.provider} (${res.entryId})`);
+                            } catch (err) {
+                              showToast(err.message);
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-mono"
+                        >
+                          Push to {cmsConfig.provider}
+                        </button>
+                        <button
+                          onClick={() => {
+                            const next = items.filter((i) => i.slug !== item.slug);
+                            setItems(next);
+                            localStorage.setItem(LOCAL_ITEMS_CACHE_KEY, JSON.stringify(next));
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/15 text-rose-300 text-xs font-mono"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Hero Banner */}
+            <section className="relative rounded-3xl overflow-hidden border border-emerald-500/30 bg-gradient-to-br from-[#111827] via-[#090E1A] to-[#064E3B]/30 p-6 sm:p-10 mb-8 shadow-2xl">
+              <div className="max-w-3xl space-y-4">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-mono">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{cmsSyncState.badge}</span>
+                </div>
+                <h1 className="text-3xl sm:text-5xl font-display font-bold tracking-tight text-white">
+                  {siteConfig.siteTitle} — <span className="text-emerald-400">{siteConfig.ownerName}</span>
+                </h1>
+                <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                  {siteConfig.bio}
+                </p>
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <button
+                    onClick={() => setComposerOpen(true)}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm"
+                  >
+                    + Post Content Without Changing Code
+                  </button>
+                  <button
+                    onClick={() => setIsCmsDrawerOpen(true)}
+                    className="px-5 py-2.5 rounded-xl border border-slate-700 hover:border-cyan-400 text-slate-200 text-sm font-mono"
+                  >
+                    Connect Contentful / Strapi
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            {/* Search & Dynamic Categories */}
+            <section className="space-y-4 mb-8">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  <button
+                    onClick={() => setSelectedCategory('ALL')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-mono whitespace-nowrap ${
+                      selectedCategory === 'ALL'
+                        ? 'bg-emerald-500 text-slate-950 font-bold'
+                        : 'bg-[#111827] text-slate-300 border border-slate-800'
                     }`}
                   >
-                    {t.label}
+                    All Categories
                   </button>
-                ))}
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id || cat.slug}
+                      onClick={() => setSelectedCategory(cat.name)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-mono whitespace-nowrap ${
+                        selectedCategory === cat.name
+                          ? 'bg-emerald-500/20 border border-emerald-400 text-emerald-300 font-bold'
+                          : 'bg-[#111827] text-slate-300 border border-slate-800'
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search blogs, projects, photo captions..."
+                  className="w-full sm:w-72 px-4 py-2 rounded-xl bg-[#111827] border border-slate-800 text-sm text-white focus:outline-none focus:border-emerald-400"
+                />
               </div>
+            </section>
 
-              {adminTab === 'CONTENT' && (
-                <div className="space-y-6">
-                  <div className="flex flex-wrap gap-3">
-                    {['BLOG', 'PHOTO', 'PROJECT'].map((type) => (
-                      <button
-                        key={type}
-                        onClick={() =>
-                          setEditingItem({
-                            id: 0,
-                            contentType: type,
-                            title: '',
-                            slug: '',
-                            summaryOrCaption: '',
-                            bodyMarkdown: '',
-                            categoryId: categories[0]?.id || 1,
-                            categoryName: categories[0]?.name || 'General',
-                            staticAssetPath:
-                              'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80',
-                            tags: 'React 19, TypeScript, GitHub Pages',
-                            liveUrl:
-                              type === 'BLOG'
-                                ? '5 min read'
-                                : type === 'PHOTO'
-                                ? 'Dhaka, Bangladesh 🇧🇩'
-                                : 'https://rasel-dev-bd.github.io',
-                            repoUrl:
-                              type === 'PHOTO'
-                                ? '35mm • f/1.8 • ISO 200'
-                                : 'https://github.com/rasel-dev-bd',
-                            isFeatured: false,
-                            isPublished: true,
-                            likesCount: 1,
-                          })
-                        }
-                        className="px-4 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold"
-                      >
-                        + New {type}
-                      </button>
-                    ))}
-                  </div>
-
-                  {editingItem && (
-                    <form
-                      onSubmit={handleSaveContentItem}
-                      className="p-6 rounded-3xl bg-[#111827] border border-emerald-500/50 space-y-4"
-                    >
-                      <input
-                        type="text"
-                        required
-                        placeholder="Title *"
-                        value={editingItem.title}
-                        onChange={(e) =>
-                          setEditingItem({
-                            ...editingItem,
-                            title: e.target.value,
-                            slug: toSlug(e.target.value),
-                          })
-                        }
-                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm"
+            {/* Content Cards Grid */}
+            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredItems.map((item) => (
+                <article
+                  key={item.id || item.slug}
+                  onClick={() => setSelectedItem(item)}
+                  className="group cursor-pointer rounded-2xl bg-[#111827] border border-slate-800/90 hover:border-emerald-500/60 overflow-hidden flex flex-col justify-between transition shadow-lg"
+                >
+                  <div>
+                    <div className="relative h-48 overflow-hidden bg-slate-900">
+                      <img
+                        src={item.mediaUrl}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
                       />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handlePhotoUploadFile}
-                        className="w-full text-xs text-slate-300"
-                      />
-                      <textarea
-                        rows="2"
-                        required
-                        placeholder="Caption or Summary *"
-                        value={editingItem.summaryOrCaption}
-                        onChange={(e) =>
-                          setEditingItem({ ...editingItem, summaryOrCaption: e.target.value })
-                        }
-                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm"
-                      />
-                      <textarea
-                        rows="4"
-                        placeholder="Markdown Body"
-                        value={editingItem.bodyMarkdown}
-                        onChange={(e) =>
-                          setEditingItem({ ...editingItem, bodyMarkdown: e.target.value })
-                        }
-                        className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono"
-                      />
-                      <div className="flex gap-3">
-                        <button
-                          type="submit"
-                          className="px-6 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-xs"
-                        >
-                          Save Content
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingItem(null)}
-                          className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-mono text-xs"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  )}
-
-                  <div className="space-y-3">
-                    {items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-4 rounded-2xl bg-[#111827] border border-slate-800 flex flex-wrap items-center justify-between gap-4"
-                      >
-                        <div>
-                          <span className="text-xs font-mono text-emerald-400 font-bold mr-2">
-                            {item.contentType}
+                      <div className="absolute top-3 left-3 flex gap-1.5">
+                        <span className="px-2.5 py-1 rounded-md bg-slate-950/85 text-emerald-400 font-mono text-[11px] font-bold">
+                          {item.contentType}
+                        </span>
+                        {item.cmsProvider && (
+                          <span className="px-2 py-1 rounded-md bg-slate-950/85 text-cyan-300 font-mono text-[10px]">
+                            {item.cmsProvider}
                           </span>
-                          <span className="text-xs font-mono text-cyan-400">{item.categoryName}</span>
-                          <h4 className="font-bold text-white">{item.title}</h4>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setEditingItem(item)}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 text-emerald-400 text-xs font-mono"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => {
-                              const next = items.filter((i) => i.id !== item.id);
-                              setItems(next);
-                              persistToStorage(siteConfig, categories, next);
-                            }}
-                            className="px-3 py-1.5 rounded-lg bg-rose-500/15 text-rose-400 text-xs font-mono"
-                          >
-                            Delete
-                          </button>
-                        </div>
+                        )}
                       </div>
+                    </div>
+
+                    <div className="p-5">
+                      <div className="text-xs font-mono text-cyan-400 mb-1.5">
+                        {item.categoryName}
+                      </div>
+                      <h2 className="text-lg font-display font-bold text-white group-hover:text-emerald-400 transition mb-2">
+                        {item.title}
+                      </h2>
+                      {item.contentType === 'PHOTO' && item.photoCaption ? (
+                        <p className="text-xs italic text-slate-300 mb-3">
+                          “{item.photoCaption}”
+                        </p>
+                      ) : (
+                        <p className="text-sm text-slate-400 line-clamp-3 mb-3">
+                          {item.summary}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="px-5 pb-5 pt-3 border-t border-slate-800/70 flex flex-wrap gap-1.5">
+                    {(item.techStack || []).slice(0, 4).map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 font-mono text-[11px]"
+                      >
+                        #{tag}
+                      </span>
                     ))}
                   </div>
-                </div>
-              )}
+                </article>
+              ))}
+            </section>
+          </>
+        )}
+      </main>
 
-              {adminTab === 'CATEGORIES' && (
-                <div className="space-y-4">
-                  <button
-                    onClick={() =>
-                      setEditingCategory({
-                        id: 0,
-                        name: '',
-                        slug: '',
-                        contentTypeScope: 'ALL',
-                        colorHex: '#10B981',
-                        description: '',
-                      })
-                    }
-                    className="px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-xs"
-                  >
-                    + Add Dynamic Category
-                  </button>
-                  {editingCategory && (
-                    <form
-                      onSubmit={handleSaveCategory}
-                      className="p-5 rounded-2xl bg-[#111827] border border-emerald-500/50 space-y-3"
-                    >
-                      <input
-                        type="text"
-                        required
-                        placeholder="Category Name *"
-                        value={editingCategory.name}
-                        onChange={(e) =>
-                          setEditingCategory({
-                            ...editingCategory,
-                            name: e.target.value,
-                            slug: toSlug(e.target.value),
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm"
-                      />
-                      <button
-                        type="submit"
-                        className="px-5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-xs"
-                      >
-                        Save Category
-                      </button>
-                    </form>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        ) : (
-          <div className="space-y-8">
-            {activeNav === 'HOME' && (
-              <section className="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-[#111827] via-[#0F172A] to-emerald-950/50 p-6 sm:p-10">
-                <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 text-xs font-mono mb-3">
-                  STATIC SSG READY • GITHUB PAGES
-                </span>
-                <h2 className="text-3xl sm:text-5xl font-bold text-white mb-2">
-                  {siteConfig.siteTitle}
-                </h2>
-                <p className="text-lg text-emerald-300 mb-3">{siteConfig.tagline}</p>
-                <p className="text-sm text-slate-300 max-w-3xl">{siteConfig.bio}</p>
-              </section>
-            )}
-
-            <div className="flex items-center gap-2 overflow-x-auto pb-2">
+      {/* Headless CMS Connection Drawer Modal */}
+      {isCmsDrawerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveCmsSettings}
+            className="w-full max-w-lg bg-[#111827] border border-slate-700 rounded-3xl p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-display font-bold text-white">
+                Headless CMS Configuration (Contentful / Strapi)
+              </h3>
               <button
-                onClick={() => setSelectedCategoryId(null)}
-                className={`px-4 py-2 rounded-xl text-xs font-mono shrink-0 ${
-                  selectedCategoryId === null
-                    ? 'bg-emerald-500 text-slate-950 font-bold'
-                    : 'bg-[#111827] text-slate-300 border border-slate-800'
-                }`}
+                type="button"
+                onClick={() => setIsCmsDrawerOpen(false)}
+                className="text-slate-400 hover:text-white"
               >
-                All Categories ({categories.length})
+                ✕
               </button>
-              {categories.map((cat) => (
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Connect Contentful or Strapi to fetch live entries and publish new posts directly from the browser without changing code.
+            </p>
+
+            <div className="flex gap-2">
+              {['CONTENTFUL', 'STRAPI'].map((p) => (
                 <button
-                  key={cat.id}
-                  onClick={() =>
-                    setSelectedCategoryId(selectedCategoryId === cat.id ? null : cat.id)
-                  }
-                  className={`px-4 py-2 rounded-xl text-xs font-mono shrink-0 border ${
-                    Number(selectedCategoryId) === Number(cat.id)
-                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold'
-                      : 'bg-[#111827] text-slate-300 border-slate-800'
+                  type="button"
+                  key={p}
+                  onClick={() => setCmsConfig((prev) => ({ ...prev, provider: p }))}
+                  className={`flex-1 py-2 rounded-xl font-mono text-xs font-bold border ${
+                    cmsConfig.provider === p
+                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                      : 'bg-slate-900 border-slate-800 text-slate-400'
                   }`}
                 >
-                  {cat.name}
+                  {p}
                 </button>
               ))}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredItems.map((item) => (
-                <article
-                  key={item.id}
-                  onClick={() => setDetailItem(item)}
-                  className="cursor-pointer rounded-3xl bg-[#111827] border border-slate-800 overflow-hidden flex flex-col justify-between hover:border-emerald-500/60 transition"
+            {cmsConfig.provider === 'CONTENTFUL' ? (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={cmsConfig.contentfulSpaceId}
+                  onChange={(e) => setCmsConfig({ ...cmsConfig, contentfulSpaceId: e.target.value })}
+                  placeholder="Contentful Space ID"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+                />
+                <input
+                  type="text"
+                  value={cmsConfig.contentfulEnvironment}
+                  onChange={(e) => setCmsConfig({ ...cmsConfig, contentfulEnvironment: e.target.value })}
+                  placeholder="Environment (default: master)"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+                />
+                <input
+                  type="password"
+                  value={cmsConfig.contentfulDeliveryToken}
+                  onChange={(e) => setCmsConfig({ ...cmsConfig, contentfulDeliveryToken: e.target.value })}
+                  placeholder="Content Delivery API Token (CDA - Read)"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+                />
+                <input
+                  type="password"
+                  value={cmsConfig.contentfulManagementToken}
+                  onChange={(e) => setCmsConfig({ ...cmsConfig, contentfulManagementToken: e.target.value })}
+                  placeholder="Content Management API Token (CMA - Write/Publish)"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  type="url"
+                  value={cmsConfig.strapiBaseUrl}
+                  onChange={(e) => setCmsConfig({ ...cmsConfig, strapiBaseUrl: e.target.value })}
+                  placeholder="Strapi Base URL (e.g. https://cms.raseldevbd.com)"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+                />
+                <input
+                  type="password"
+                  value={cmsConfig.strapiApiToken}
+                  onChange={(e) => setCmsConfig({ ...cmsConfig, strapiApiToken: e.target.value })}
+                  placeholder="Strapi API Token (Bearer)"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsCmsDrawerOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-700 text-xs font-mono text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs"
+              >
+                Save & Sync CMS
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* No-Code Headless CMS Post Composer Modal */}
+      {composerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <form
+            onSubmit={handleCreatePost}
+            className="w-full max-w-xl bg-[#111827] border border-slate-700 rounded-3xl p-6 space-y-3 shadow-2xl my-8"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-display font-bold text-white">
+                Post Content via Headless CMS ({cmsConfig.provider})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setComposerOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {['BLOG', 'PROJECT', 'PHOTO'].map((t) => (
+                <button
+                  type="button"
+                  key={t}
+                  onClick={() => setDraft({ ...draft, contentType: t })}
+                  className={`py-2 rounded-xl font-mono text-xs font-bold border ${
+                    draft.contentType === t
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                      : 'bg-slate-900 border-slate-800 text-slate-300'
+                  }`}
                 >
-                  <div>
-                    <img
-                      src={item.staticAssetPath || item.mediaSource}
-                      alt={item.title}
-                      className="w-full h-48 object-cover bg-slate-900"
-                    />
-                    <div className="p-5 space-y-2">
-                      <div className="flex justify-between text-xs font-mono text-emerald-400">
-                        <span>{item.contentType}</span>
-                        <span>{item.categoryName}</span>
-                      </div>
-                      <h3 className="text-lg font-bold text-white">{item.title}</h3>
-                      <p className="text-sm text-slate-300 line-clamp-3">
-                        {item.summaryOrCaption}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="px-5 py-3 border-t border-slate-800 flex justify-between text-xs font-mono text-slate-400">
-                    <span>{(item.publishedDateIso || '').slice(0, 10)}</span>
-                    <button
-                      onClick={(e) => handleLike(item.id, e)}
-                      className="text-rose-400 font-bold"
-                    >
-                      ♥ {item.likesCount || 0}
-                    </button>
-                  </div>
-                </article>
+                  {t}
+                </button>
               ))}
             </div>
-          </div>
-        )}
-      </main>
 
-      {toastMsg && (
-        <div className="fixed bottom-5 right-5 z-50 px-5 py-3 rounded-2xl bg-emerald-950 border border-emerald-400 text-emerald-200 text-xs font-mono shadow-2xl">
-          ✓ {toastMsg}
+            <input
+              type="text"
+              required
+              value={draft.title}
+              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+              placeholder="Post / Project / Photo Title *"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={draft.categoryName}
+                onChange={(e) => setDraft({ ...draft, categoryName: e.target.value })}
+                placeholder="Dynamic Category Name"
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+              />
+              <input
+                type="text"
+                value={draft.techStackCsv}
+                onChange={(e) => setDraft({ ...draft, techStackCsv: e.target.value })}
+                placeholder="Tags (comma-separated)"
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+              />
+            </div>
+
+            {draft.contentType === 'PHOTO' && (
+              <input
+                type="text"
+                value={draft.photoCaption}
+                onChange={(e) => setDraft({ ...draft, photoCaption: e.target.value })}
+                placeholder="Photo Caption & Story"
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+              />
+            )}
+
+            <div className="space-y-1">
+              <label className="text-xs font-mono text-slate-400">
+                Media Image URL or Upload Local Photo
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={draft.mediaUrl}
+                  onChange={(e) => setDraft({ ...draft, mediaUrl: e.target.value })}
+                  placeholder="https://..."
+                  className="flex-1 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+                />
+                <label className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono text-cyan-300 cursor-pointer flex items-center">
+                  Upload
+                  <input type="file" accept="image/*" onChange={handleMediaFileUpload} className="hidden" />
+                </label>
+              </div>
+            </div>
+
+            <textarea
+              rows={2}
+              value={draft.summary}
+              onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
+              placeholder="Short Summary"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+            />
+
+            <textarea
+              rows={4}
+              value={draft.markdownBody}
+              onChange={(e) => setDraft({ ...draft, markdownBody: e.target.value })}
+              placeholder="Full Markdown Article / Project Details..."
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white"
+            />
+
+            <label className="flex items-center gap-2 text-xs text-emerald-300 font-mono">
+              <input
+                type="checkbox"
+                checked={draft.publishToRemoteCms}
+                onChange={(e) => setDraft({ ...draft, publishToRemoteCms: e.target.checked })}
+              />
+              <span>Publish directly to {cmsConfig.provider} API (Zero-Code Cloud Post)</span>
+            </label>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setComposerOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-700 text-xs font-mono text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs"
+              >
+                Publish Now
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

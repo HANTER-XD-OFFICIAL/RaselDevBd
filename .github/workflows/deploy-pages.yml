@@ -1,0 +1,56 @@
+name: Deploy Rasel Dev BD (React + Headless CMS) to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  repository_dispatch:
+    types: ["cms-publish", "contentful-webhook", "strapi-webhook"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install & Build React Static Bundle
+        working-directory: ./github-pages-site
+        env:
+          VITE_CMS_PROVIDER: ${{ vars.VITE_CMS_PROVIDER || 'CONTENTFUL' }}
+          VITE_CONTENTFUL_SPACE_ID: ${{ secrets.VITE_CONTENTFUL_SPACE_ID }}
+          VITE_CONTENTFUL_ENVIRONMENT: ${{ vars.VITE_CONTENTFUL_ENVIRONMENT || 'master' }}
+          VITE_CONTENTFUL_DELIVERY_TOKEN: ${{ secrets.VITE_CONTENTFUL_DELIVERY_TOKEN }}
+          VITE_STRAPI_BASE_URL: ${{ vars.VITE_STRAPI_BASE_URL || 'https://cms.raseldevbd.com' }}
+          VITE_STRAPI_API_TOKEN: ${{ secrets.VITE_STRAPI_API_TOKEN }}
+        run: |
+          npm install
+          npm run build
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./github-pages-site/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,30 +17,28 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.outlined.AdminPanelSettings
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,29 +51,29 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.ContentType
-import com.example.ui.AdminTab
-import com.example.ui.AppRoutes
-import com.example.ui.PortfolioUiState
+import com.example.ui.AdminSubTab
+import com.example.ui.NavRoutes
 import com.example.ui.PortfolioViewModel
+import com.example.ui.PortfolioViewModelFactory
 import com.example.ui.screens.AdminDashboardScreen
-import com.example.ui.screens.CategoryEditorModal
+import com.example.ui.screens.CategoryEditorDialog
 import com.example.ui.screens.ContentDetailScreen
-import com.example.ui.screens.ContentEditorModal
+import com.example.ui.screens.ContentEditorDialog
 import com.example.ui.screens.ContentFeedScreen
 import com.example.ui.screens.PortfolioHomeScreen
 import com.example.ui.theme.RaselDevTheme
@@ -86,15 +85,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             val portfolioViewModel: PortfolioViewModel = viewModel(
-                factory = PortfolioViewModel.provideFactory(context)
+                factory = PortfolioViewModelFactory(context)
             )
-            val uiState by portfolioViewModel.uiState.collectAsStateWithLifecycle()
+            val isDarkTheme by portfolioViewModel.isDarkTheme.collectAsStateWithLifecycle()
 
-            RaselDevTheme(darkTheme = uiState.isDarkTheme) {
-                RaselDevPortfolioApp(
-                    uiState = uiState,
-                    viewModel = portfolioViewModel
-                )
+            RaselDevTheme(darkTheme = isDarkTheme) {
+                RaselDevBdApp(viewModel = portfolioViewModel)
             }
         }
     }
@@ -102,200 +98,158 @@ class MainActivity : ComponentActivity() {
 
 private data class NavDestination(
     val route: String,
-    val labelRes: Int,
-    val selectedIcon: ImageVector,
-    val unselectedIcon: ImageVector,
+    val labelResId: Int,
+    val icon: ImageVector,
     val testTag: String
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RaselDevPortfolioApp(
-    uiState: PortfolioUiState,
-    viewModel: PortfolioViewModel
+fun RaselDevBdApp(
+    viewModel: PortfolioViewModel,
+    modifier: Modifier = Modifier
 ) {
-    val navDestinations = listOf(
-        NavDestination(
-            route = AppRoutes.ROUTE_HOME,
-            labelRes = R.string.nav_home,
-            selectedIcon = Icons.Filled.Home,
-            unselectedIcon = Icons.Outlined.Home,
-            testTag = "nav_portfolio_home"
-        ),
-        NavDestination(
-            route = AppRoutes.ROUTE_PROJECTS,
-            labelRes = R.string.nav_projects,
-            selectedIcon = Icons.Filled.Code,
-            unselectedIcon = Icons.Outlined.Code,
-            testTag = "nav_projects"
-        ),
-        NavDestination(
-            route = AppRoutes.ROUTE_BLOG,
-            labelRes = R.string.nav_blog,
-            selectedIcon = Icons.AutoMirrored.Filled.Article,
-            unselectedIcon = Icons.AutoMirrored.Filled.Article,
-            testTag = "nav_blog"
-        ),
-        NavDestination(
-            route = AppRoutes.ROUTE_PHOTOS,
-            labelRes = R.string.nav_photos,
-            selectedIcon = Icons.Filled.CameraAlt,
-            unselectedIcon = Icons.Outlined.CameraAlt,
-            testTag = "nav_photos"
-        ),
-        NavDestination(
-            route = AppRoutes.ROUTE_ADMIN,
-            labelRes = R.string.nav_admin,
-            selectedIcon = Icons.Filled.AdminPanelSettings,
-            unselectedIcon = Icons.Outlined.AdminPanelSettings,
-            testTag = "nav_admin"
-        )
+    val currentRoute by viewModel.currentRoute.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val allItems by viewModel.allContentItems.collectAsStateWithLifecycle()
+    val publishedItems by viewModel.publishedContentItems.collectAsStateWithLifecycle()
+    val siteConfig by viewModel.siteConfig.collectAsStateWithLifecycle()
+    val selectedCategoryId by viewModel.selectedCategoryId.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val selectedContentItem by viewModel.selectedContentItem.collectAsStateWithLifecycle()
+    val isAdminUnlocked by viewModel.isAdminUnlocked.collectAsStateWithLifecycle()
+    val adminAuthError by viewModel.adminAuthError.collectAsStateWithLifecycle()
+    val activeAdminTab by viewModel.activeAdminTab.collectAsStateWithLifecycle()
+    val adminContentFilterType by viewModel.adminContentFilterType.collectAsStateWithLifecycle()
+    val isContentModalOpen by viewModel.isContentModalOpen.collectAsStateWithLifecycle()
+    val editingContentItem by viewModel.editingContentItem.collectAsStateWithLifecycle()
+    val isCategoryModalOpen by viewModel.isCategoryModalOpen.collectAsStateWithLifecycle()
+    val editingCategory by viewModel.editingCategory.collectAsStateWithLifecycle()
+    val isCmsSyncing by viewModel.isCmsSyncing.collectAsStateWithLifecycle()
+    val statusBannerMessage by viewModel.statusBannerMessage.collectAsStateWithLifecycle()
+    val isDarkTheme by viewModel.isDarkTheme.collectAsStateWithLifecycle()
+
+    val destinations = listOf(
+        NavDestination(NavRoutes.ROUTE_HOME, R.string.nav_home, Icons.Default.Home, "nav_home"),
+        NavDestination(NavRoutes.ROUTE_PROJECTS, R.string.nav_projects, Icons.Default.Code, "nav_projects"),
+        NavDestination(NavRoutes.ROUTE_BLOG, R.string.nav_blog, Icons.AutoMirrored.Filled.Article, "nav_blog"),
+        NavDestination(NavRoutes.ROUTE_PHOTOS, R.string.nav_photos, Icons.Default.CameraAlt, "nav_photos"),
+        NavDestination(NavRoutes.ROUTE_ADMIN, R.string.nav_admin, Icons.Default.AdminPanelSettings, "nav_admin")
     )
 
-    // Full-screen Modal Priority:
-    // 1. Content Editor Modal
-    if (uiState.isContentEditorOpen && uiState.editingContentItem != null) {
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing
-        ) { innerPadding ->
-            ContentEditorModal(
-                initialItem = uiState.editingContentItem,
-                categories = uiState.categories,
-                onSave = { viewModel.saveContentItem(it) },
-                onCancel = { viewModel.closeContentEditor() },
-                modifier = Modifier.padding(innerPadding)
-            )
-        }
-        return
-    }
-
-    // 2. Category Editor Modal
-    if (uiState.isCategoryEditorOpen && uiState.editingCategory != null) {
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing
-        ) { innerPadding ->
-            CategoryEditorModal(
-                initialCategory = uiState.editingCategory,
-                onSave = { viewModel.saveCategory(it) },
-                onCancel = { viewModel.closeCategoryEditor() },
-                modifier = Modifier.padding(innerPadding)
-            )
-        }
-        return
-    }
-
-    // 3. Content Detail Screen
-    if (uiState.selectedDetailItem != null) {
-        val item = uiState.selectedDetailItem
-        val catColor = uiState.categories.find { it.id == item.categoryId }?.colorHex ?: "#10B981"
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing
-        ) { innerPadding ->
-            ContentDetailScreen(
-                item = item,
-                categoryColorHex = catColor,
-                isAdminUnlocked = uiState.isAdminUnlocked,
-                onBack = { viewModel.closeDetailItem() },
-                onLike = { viewModel.likeItem(item.id) },
-                onEditInAdmin = {
-                    if (uiState.isAdminUnlocked) {
-                        viewModel.openEditContentEditor(item)
-                    } else {
-                        viewModel.closeDetailItem()
-                        viewModel.navigateTo(AppRoutes.ROUTE_ADMIN)
-                        viewModel.showStatusMessage("Unlock Admin Studio (PIN: ${uiState.siteConfig.adminPasscode}) to edit content")
-                    }
-                },
-                modifier = Modifier.padding(innerPadding)
-            )
-        }
-        return
-    }
-
-    // 4. Main Adaptive Portfolio + Admin Shell
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val useNavigationRail = maxWidth >= 680.dp
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val isWideScreen = maxWidth >= 720.dp
 
         Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
-                TopAppBar(
-                    title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier
-                                .clickable { viewModel.navigateTo(AppRoutes.ROUTE_HOME) }
-                                .testTag("top_bar_brand")
-                        ) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
-                                shape = RoundedCornerShape(10.dp)
+                if (currentRoute != NavRoutes.ROUTE_DETAIL) {
+                    TopAppBar(
+                        title = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clickable { viewModel.navigateTo(NavRoutes.ROUTE_HOME) }
+                                    .testTag("top_bar_brand")
                             ) {
-                                Text(
-                                    text = "<R/>",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                Image(
+                                    painter = painterResource(id = R.drawable.img_app_icon),
+                                    contentDescription = "Rasel Dev BD Logo",
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = siteConfig.siteTitle,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${siteConfig.cmsProvider} Headless CMS • ${siteConfig.customDomain}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        },
+                        actions = {
+                            Surface(
+                                color = if (isAdminUnlocked) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                shape = RoundedCornerShape(50),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isAdminUnlocked) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                ),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable {
+                                        viewModel.setAdminTab(AdminSubTab.HEADLESS_CMS)
+                                        viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
+                                    }
+                                    .testTag("top_bar_cms_status_pill")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudSync,
+                                        contentDescription = "Headless CMS Hub",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = siteConfig.cmsProvider,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = { viewModel.toggleTheme() },
+                                modifier = Modifier.testTag("toggle_theme_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                    contentDescription = "Toggle theme"
                                 )
                             }
-                            Column {
-                                Text(
-                                    text = uiState.siteConfig.siteTitle,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = if (uiState.isAdminUnlocked) "Admin Unlocked • SSG Ready" else "Developer Portfolio & CMS",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (uiState.isAdminUnlocked) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = { viewModel.toggleTheme() },
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("theme_toggle_button")
-                        ) {
-                            Icon(
-                                imageVector = if (uiState.isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "Toggle Dark/Light Theme",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
                     )
-                )
+                }
             },
             bottomBar = {
-                if (!useNavigationRail) {
+                if (!isWideScreen && currentRoute != NavRoutes.ROUTE_DETAIL) {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 6.dp,
                         modifier = Modifier.testTag("bottom_navigation_bar")
                     ) {
-                        navDestinations.forEach { dest ->
-                            val selected = uiState.currentRoute == dest.route
-                            val label = stringResource(dest.labelRes)
+                        destinations.forEach { dest ->
+                            val selected = currentRoute == dest.route
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = { viewModel.navigateTo(dest.route) },
                                 icon = {
                                     Icon(
-                                        imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
-                                        contentDescription = label
+                                        imageVector = dest.icon,
+                                        contentDescription = stringResource(dest.labelResId)
                                     )
                                 },
                                 label = {
                                     Text(
-                                        text = label,
+                                        text = stringResource(dest.labelResId),
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 },
@@ -303,6 +257,39 @@ fun RaselDevPortfolioApp(
                             )
                         }
                     }
+                }
+            },
+            floatingActionButton = {
+                if (currentRoute != NavRoutes.ROUTE_DETAIL && currentRoute != NavRoutes.ROUTE_ADMIN) {
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            val defaultType = when (currentRoute) {
+                                NavRoutes.ROUTE_PROJECTS -> ContentType.PROJECT
+                                NavRoutes.ROUTE_PHOTOS -> ContentType.PHOTO
+                                else -> ContentType.BLOG
+                            }
+                            if (isAdminUnlocked) {
+                                viewModel.openCreateContentModal(defaultType)
+                            } else {
+                                viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Post Content"
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = if (isAdminUnlocked) "Post to CMS" else "CMS Studio",
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        modifier = Modifier.testTag("main_fab_button")
+                    )
                 }
             }
         ) { innerPadding ->
@@ -311,215 +298,223 @@ fun RaselDevPortfolioApp(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                if (useNavigationRail) {
+                if (isWideScreen && currentRoute != NavRoutes.ROUTE_DETAIL) {
                     NavigationRail(
                         containerColor = MaterialTheme.colorScheme.surface,
                         modifier = Modifier
                             .fillMaxHeight()
                             .testTag("side_navigation_rail")
                     ) {
-                        navDestinations.forEach { dest ->
-                            val selected = uiState.currentRoute == dest.route
-                            val label = stringResource(dest.labelRes)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        destinations.forEach { dest ->
+                            val selected = currentRoute == dest.route
                             NavigationRailItem(
                                 selected = selected,
                                 onClick = { viewModel.navigateTo(dest.route) },
                                 icon = {
                                     Icon(
-                                        imageVector = if (selected) dest.selectedIcon else dest.unselectedIcon,
-                                        contentDescription = label
+                                        imageVector = dest.icon,
+                                        contentDescription = stringResource(dest.labelResId)
                                     )
                                 },
                                 label = {
                                     Text(
-                                        text = label,
+                                        text = stringResource(dest.labelResId),
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 },
-                                modifier = Modifier.testTag(dest.testTag)
+                                modifier = Modifier.testTag("rail_${dest.testTag}")
                             )
                         }
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.background)
-                ) {
-                    when (uiState.currentRoute) {
-                        AppRoutes.ROUTE_HOME -> {
-                            PortfolioHomeScreen(
-                                siteConfig = uiState.siteConfig,
-                                categories = uiState.categories,
-                                publishedItems = uiState.publishedItems,
-                                selectedCategoryId = uiState.selectedCategoryId,
-                                searchQuery = uiState.searchQuery,
-                                onSelectCategory = { viewModel.selectCategory(it) },
-                                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                                onOpenItem = { viewModel.openDetailItem(it) },
-                                onLikeItem = { viewModel.likeItem(it) },
-                                onNavigateRoute = { viewModel.navigateTo(it) },
-                                onOpenAdminTab = { viewModel.selectAdminTab(it) }
-                            )
-                        }
-                        AppRoutes.ROUTE_PROJECTS -> {
-                            ContentFeedScreen(
-                                contentType = ContentType.PROJECT,
-                                title = "Project Showcases",
-                                subtitle = "Full-stack React, Cloud, and Native Android engineering case studies",
-                                categories = uiState.categories,
-                                publishedItems = uiState.publishedItems,
-                                selectedCategoryId = uiState.selectedCategoryId,
-                                searchQuery = uiState.searchQuery,
-                                onSelectCategory = { viewModel.selectCategory(it) },
-                                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                                onOpenItem = { viewModel.openDetailItem(it) },
-                                onLikeItem = { viewModel.likeItem(it) },
-                                onQuickAddInAdmin = { type ->
-                                    if (uiState.isAdminUnlocked) {
-                                        viewModel.openNewContentEditor(type)
-                                    } else {
-                                        viewModel.navigateTo(AppRoutes.ROUTE_ADMIN)
-                                        viewModel.showStatusMessage("Unlock Admin Studio to add a new Project Showcase")
-                                    }
-                                },
-                                onBackToHome = { viewModel.navigateTo(AppRoutes.ROUTE_HOME) }
-                            )
-                        }
-                        AppRoutes.ROUTE_BLOG -> {
-                            ContentFeedScreen(
-                                contentType = ContentType.BLOG,
-                                title = "Engineering Blog",
-                                subtitle = "Technical deep dives on React SSG, Jetpack Compose, and System Design",
-                                categories = uiState.categories,
-                                publishedItems = uiState.publishedItems,
-                                selectedCategoryId = uiState.selectedCategoryId,
-                                searchQuery = uiState.searchQuery,
-                                onSelectCategory = { viewModel.selectCategory(it) },
-                                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                                onOpenItem = { viewModel.openDetailItem(it) },
-                                onLikeItem = { viewModel.likeItem(it) },
-                                onQuickAddInAdmin = { type ->
-                                    if (uiState.isAdminUnlocked) {
-                                        viewModel.openNewContentEditor(type)
-                                    } else {
-                                        viewModel.navigateTo(AppRoutes.ROUTE_ADMIN)
-                                        viewModel.showStatusMessage("Unlock Admin Studio to write a new Blog Post")
-                                    }
-                                },
-                                onBackToHome = { viewModel.navigateTo(AppRoutes.ROUTE_HOME) }
-                            )
-                        }
-                        AppRoutes.ROUTE_PHOTOS -> {
-                            ContentFeedScreen(
-                                contentType = ContentType.PHOTO,
-                                title = "Photos & Captions",
-                                subtitle = "Visual stories, Dhaka twilight photography, and behind-the-shot EXIF notes",
-                                categories = uiState.categories,
-                                publishedItems = uiState.publishedItems,
-                                selectedCategoryId = uiState.selectedCategoryId,
-                                searchQuery = uiState.searchQuery,
-                                onSelectCategory = { viewModel.selectCategory(it) },
-                                onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                                onOpenItem = { viewModel.openDetailItem(it) },
-                                onLikeItem = { viewModel.likeItem(it) },
-                                onQuickAddInAdmin = { type ->
-                                    if (uiState.isAdminUnlocked) {
-                                        viewModel.openNewContentEditor(type)
-                                    } else {
-                                        viewModel.navigateTo(AppRoutes.ROUTE_ADMIN)
-                                        viewModel.showStatusMessage("Unlock Admin Studio to upload a new Photo with Caption")
-                                    }
-                                },
-                                onBackToHome = { viewModel.navigateTo(AppRoutes.ROUTE_HOME) }
-                            )
-                        }
-                        AppRoutes.ROUTE_ADMIN -> {
-                            AdminDashboardScreen(
-                                siteConfig = uiState.siteConfig,
-                                categories = uiState.categories,
-                                allItems = uiState.allItems,
-                                publishedItems = uiState.publishedItems,
-                                isAdminUnlocked = uiState.isAdminUnlocked,
-                                adminAuthError = uiState.adminAuthError,
-                                activeAdminTab = uiState.activeAdminTab,
-                                adminTypeFilter = uiState.adminTypeFilter,
-                                onUnlockAttempt = { viewModel.attemptAdminUnlock(it) },
-                                onLockSession = { viewModel.lockAdminSession() },
-                                onSelectAdminTab = { viewModel.selectAdminTab(it) },
-                                onSetAdminTypeFilter = { viewModel.setAdminTypeFilter(it) },
-                                onOpenNewContent = { viewModel.openNewContentEditor(it) },
-                                onOpenEditContent = { viewModel.openEditContentEditor(it) },
-                                onDeleteContent = { viewModel.deleteContentItem(it) },
-                                onTogglePublished = { viewModel.toggleItemPublished(it) },
-                                onToggleFeatured = { viewModel.toggleItemFeatured(it) },
-                                onOpenNewCategory = { viewModel.openNewCategoryEditor() },
-                                onOpenEditCategory = { viewModel.openEditCategoryEditor(it) },
-                                onDeleteCategory = { viewModel.deleteCategory(it) },
-                                onSaveSiteConfig = { viewModel.saveSiteConfig(it) },
-                                onImportStaticBundle = { viewModel.importStaticJsonBundle(it) },
-                                onShowStatus = { viewModel.showStatusMessage(it) },
-                                onBackToHome = { viewModel.navigateTo(AppRoutes.ROUTE_HOME) }
-                            )
-                        }
+                Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                    when (currentRoute) {
+                        NavRoutes.ROUTE_HOME -> PortfolioHomeScreen(
+                            config = siteConfig,
+                            categories = categories,
+                            publishedItems = publishedItems,
+                            selectedCategoryId = selectedCategoryId,
+                            searchQuery = searchQuery,
+                            isAdminUnlocked = isAdminUnlocked,
+                            isCmsSyncing = isCmsSyncing,
+                            onSelectCategory = viewModel::selectCategory,
+                            onSearchChange = viewModel::updateSearchQuery,
+                            onOpenItem = viewModel::openContentDetail,
+                            onEditItem = viewModel::openEditContentModal,
+                            onPublishItemToCms = viewModel::publishItemToHeadlessCms,
+                            onSyncCms = viewModel::syncFromHeadlessCms,
+                            onNavigateRoute = viewModel::navigateTo,
+                            onOpenCmsSettings = {
+                                viewModel.setAdminTab(AdminSubTab.HEADLESS_CMS)
+                                viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
+                            },
+                            onQuickCreate = { type ->
+                                if (isAdminUnlocked) {
+                                    viewModel.openCreateContentModal(type)
+                                } else {
+                                    viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
+                                }
+                            }
+                        )
+
+                        NavRoutes.ROUTE_PROJECTS -> ContentFeedScreen(
+                            contentType = ContentType.PROJECT,
+                            title = "Project Showcases",
+                            subtitle = "Production web, cloud, and Android architectures synced via ${siteConfig.cmsProvider}",
+                            categories = categories,
+                            publishedItems = publishedItems,
+                            selectedCategoryId = selectedCategoryId,
+                            searchQuery = searchQuery,
+                            isAdminUnlocked = isAdminUnlocked,
+                            onSelectCategory = viewModel::selectCategory,
+                            onSearchChange = viewModel::updateSearchQuery,
+                            onOpenItem = viewModel::openContentDetail,
+                            onEditItem = viewModel::openEditContentModal,
+                            onPublishItemToCms = viewModel::publishItemToHeadlessCms,
+                            onCreateNewOfType = {
+                                if (isAdminUnlocked) {
+                                    viewModel.openCreateContentModal(ContentType.PROJECT)
+                                } else {
+                                    viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
+                                }
+                            },
+                            onBackToHome = { viewModel.navigateBack() }
+                        )
+
+                        NavRoutes.ROUTE_BLOG -> ContentFeedScreen(
+                            contentType = ContentType.BLOG,
+                            title = "Engineering Blog",
+                            subtitle = "Articles posted via Contentful / Strapi without changing code",
+                            categories = categories,
+                            publishedItems = publishedItems,
+                            selectedCategoryId = selectedCategoryId,
+                            searchQuery = searchQuery,
+                            isAdminUnlocked = isAdminUnlocked,
+                            onSelectCategory = viewModel::selectCategory,
+                            onSearchChange = viewModel::updateSearchQuery,
+                            onOpenItem = viewModel::openContentDetail,
+                            onEditItem = viewModel::openEditContentModal,
+                            onPublishItemToCms = viewModel::publishItemToHeadlessCms,
+                            onCreateNewOfType = {
+                                if (isAdminUnlocked) {
+                                    viewModel.openCreateContentModal(ContentType.BLOG)
+                                } else {
+                                    viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
+                                }
+                            },
+                            onBackToHome = { viewModel.navigateBack() }
+                        )
+
+                        NavRoutes.ROUTE_PHOTOS -> ContentFeedScreen(
+                            contentType = ContentType.PHOTO,
+                            title = "Photos & Visual Stories",
+                            subtitle = "Curated photography with captions, locations, and EXIF metadata",
+                            categories = categories,
+                            publishedItems = publishedItems,
+                            selectedCategoryId = selectedCategoryId,
+                            searchQuery = searchQuery,
+                            isAdminUnlocked = isAdminUnlocked,
+                            onSelectCategory = viewModel::selectCategory,
+                            onSearchChange = viewModel::updateSearchQuery,
+                            onOpenItem = viewModel::openContentDetail,
+                            onEditItem = viewModel::openEditContentModal,
+                            onPublishItemToCms = viewModel::publishItemToHeadlessCms,
+                            onCreateNewOfType = {
+                                if (isAdminUnlocked) {
+                                    viewModel.openCreateContentModal(ContentType.PHOTO)
+                                } else {
+                                    viewModel.navigateTo(NavRoutes.ROUTE_ADMIN)
+                                }
+                            },
+                            onBackToHome = { viewModel.navigateBack() }
+                        )
+
+                        NavRoutes.ROUTE_ADMIN -> AdminDashboardScreen(
+                            config = siteConfig,
+                            categories = categories,
+                            allItems = allItems,
+                            isAdminUnlocked = isAdminUnlocked,
+                            authError = adminAuthError,
+                            activeTab = activeAdminTab,
+                            contentFilterType = adminContentFilterType,
+                            isCmsSyncing = isCmsSyncing,
+                            onUnlock = viewModel::unlockAdmin,
+                            onLock = viewModel::lockAdmin,
+                            onSelectTab = viewModel::setAdminTab,
+                            onSelectContentFilter = viewModel::setAdminContentFilterType,
+                            onCreateContent = viewModel::openCreateContentModal,
+                            onEditContent = viewModel::openEditContentModal,
+                            onTogglePublish = viewModel::togglePublishStatus,
+                            onToggleFeatured = viewModel::toggleFeaturedStatus,
+                            onDeleteContent = viewModel::deleteContentItem,
+                            onPublishItemToCms = viewModel::publishItemToHeadlessCms,
+                            onSyncFromCms = viewModel::syncFromHeadlessCms,
+                            onSaveCmsConfig = viewModel::saveHeadlessCmsConfig,
+                            onCreateCategory = viewModel::openCreateCategoryModal,
+                            onEditCategory = viewModel::openEditCategoryModal,
+                            onDeleteCategory = viewModel::deleteCategory,
+                            onSaveSiteConfig = viewModel::saveSiteConfig,
+                            onGenerateJson = viewModel::generateJsonBundle,
+                            onGenerateCmsClientJs = viewModel::generateCmsClientCode,
+                            onGenerateReactJsx = viewModel::generateReactComponentCode,
+                            onGenerateIndexHtml = viewModel::generateIndexHtmlCode,
+                            onGenerateWorkflowYaml = viewModel::generateWorkflowYamlCode,
+                            onMarkExported = viewModel::markExportedNow,
+                            onImportJson = viewModel::importJsonBundle,
+                            onResetDemoData = viewModel::resetDemoData,
+                            onShowMessage = viewModel::showBanner,
+                            onBackToHome = { viewModel.navigateBack() }
+                        )
+
+                        NavRoutes.ROUTE_DETAIL -> ContentDetailScreen(
+                            item = selectedContentItem,
+                            isAdminUnlocked = isAdminUnlocked,
+                            onBack = { viewModel.navigateBack() },
+                            onEdit = viewModel::openEditContentModal,
+                            onPublishToCms = viewModel::publishItemToHeadlessCms,
+                            onDelete = viewModel::deleteContentItem
+                        )
                     }
 
-                    // Floating Status Toast Banner
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = uiState.statusBannerMessage != null,
+                        visible = statusBannerMessage != null,
                         enter = fadeIn(),
                         exit = fadeOut(),
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
+                            .align(Alignment.TopCenter)
                             .padding(16.dp)
                     ) {
-                        uiState.statusBannerMessage?.let { message ->
-                            Surface(
-                                color = Color(0xFF064E3B),
-                                border = BorderStroke(1.dp, Color(0xFF10B981)),
-                                shape = RoundedCornerShape(14.dp),
-                                shadowElevation = 8.dp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("status_toast_banner")
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            shadowElevation = 6.dp,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.testTag("status_toast_banner")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                Text(
+                                    text = statusBannerMessage ?: "",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = { viewModel.dismissBanner() },
+                                    modifier = Modifier.size(28.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = Color(0xFF10B981),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Text(
-                                            text = message,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.White
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = { viewModel.dismissStatusMessage() },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Dismiss",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Dismiss notification",
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                 }
                             }
                         }
@@ -527,5 +522,23 @@ fun RaselDevPortfolioApp(
                 }
             }
         }
+    }
+
+    if (isContentModalOpen && editingContentItem != null) {
+        ContentEditorDialog(
+            initialItem = editingContentItem!!,
+            categories = categories,
+            activeCmsProvider = siteConfig.cmsProvider,
+            onDismiss = viewModel::closeContentModal,
+            onSave = viewModel::saveContentItem
+        )
+    }
+
+    if (isCategoryModalOpen && editingCategory != null) {
+        CategoryEditorDialog(
+            initialCategory = editingCategory!!,
+            onDismiss = viewModel::closeCategoryModal,
+            onSave = viewModel::saveCategory
+        )
     }
 }

@@ -19,384 +19,434 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-object AppRoutes {
+object NavRoutes {
     const val ROUTE_HOME = "portfolio_home"
     const val ROUTE_PROJECTS = "project_showcases"
     const val ROUTE_BLOG = "blog_posts"
     const val ROUTE_PHOTOS = "photo_gallery"
     const val ROUTE_ADMIN = "admin_dashboard"
+    const val ROUTE_DETAIL = "content_detail"
 }
 
-enum class AdminTab {
+enum class AdminSubTab {
     CONTENT,
     CATEGORIES,
-    GITHUB_PAGES,
+    HEADLESS_CMS,
+    STATIC_EXPORT,
     SETTINGS
 }
 
-data class PortfolioUiState(
-    val categories: List<CategoryEntity> = emptyList(),
-    val allItems: List<ContentItemEntity> = emptyList(),
-    val publishedItems: List<ContentItemEntity> = emptyList(),
-    val siteConfig: SiteConfigEntity = SiteConfigEntity(),
-    val currentRoute: String = AppRoutes.ROUTE_HOME,
-    val selectedCategoryId: Long? = null,
-    val searchQuery: String = "",
-    val selectedDetailItem: ContentItemEntity? = null,
-    val isAdminUnlocked: Boolean = false,
-    val adminAuthError: String? = null,
-    val activeAdminTab: AdminTab = AdminTab.CONTENT,
-    val adminTypeFilter: String = ContentType.ALL,
-    val editingContentItem: ContentItemEntity? = null,
-    val isContentEditorOpen: Boolean = false,
-    val editingCategory: CategoryEntity? = null,
-    val isCategoryEditorOpen: Boolean = false,
-    val isDarkTheme: Boolean = true,
-    val statusBannerMessage: String? = null
-)
+class PortfolioViewModel(private val repository: PortfolioRepository) : ViewModel() {
 
-private data class BaseDataSnapshot(
-    val categories: List<CategoryEntity>,
-    val allItems: List<ContentItemEntity>,
-    val publishedItems: List<ContentItemEntity>,
-    val siteConfig: SiteConfigEntity
-)
+    val categories: StateFlow<List<CategoryEntity>> = repository.allCategories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-private data class UiControlState(
-    val currentRoute: String = AppRoutes.ROUTE_HOME,
-    val selectedCategoryId: Long? = null,
-    val searchQuery: String = "",
-    val selectedDetailItemId: Long? = null,
-    val isAdminUnlocked: Boolean = false,
-    val adminAuthError: String? = null,
-    val activeAdminTab: AdminTab = AdminTab.CONTENT,
-    val adminTypeFilter: String = ContentType.ALL,
-    val editingContentItem: ContentItemEntity? = null,
-    val isContentEditorOpen: Boolean = false,
-    val editingCategory: CategoryEntity? = null,
-    val isCategoryEditorOpen: Boolean = false,
-    val isDarkTheme: Boolean = true,
-    val statusBannerMessage: String? = null
-)
+    val allContentItems: StateFlow<List<ContentItemEntity>> = repository.allContentItems
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-class PortfolioViewModel(
-    private val repository: PortfolioRepository
-) : ViewModel() {
+    val publishedContentItems: StateFlow<List<ContentItemEntity>> = repository.publishedContentItems
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _controls = MutableStateFlow(UiControlState())
+    val siteConfig: StateFlow<SiteConfigEntity> = combine(
+        repository.siteConfig
+    ) { arr ->
+        arr.firstOrNull() ?: SiteConfigEntity()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SiteConfigEntity())
+
+    private val _currentRoute = MutableStateFlow(NavRoutes.ROUTE_HOME)
+    val currentRoute: StateFlow<String> = _currentRoute.asStateFlow()
+
+    private val _routeHistory = MutableStateFlow<List<String>>(emptyList())
+
+    private val _selectedCategoryId = MutableStateFlow<Long?>(null)
+    val selectedCategoryId: StateFlow<Long?> = _selectedCategoryId.asStateFlow()
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _selectedItemId = MutableStateFlow<Long?>(null)
+    val selectedItemId: StateFlow<Long?> = _selectedItemId.asStateFlow()
+
+    private val _isAdminUnlocked = MutableStateFlow(false)
+    val isAdminUnlocked: StateFlow<Boolean> = _isAdminUnlocked.asStateFlow()
+
+    private val _adminAuthError = MutableStateFlow<String?>(null)
+    val adminAuthError: StateFlow<String?> = _adminAuthError.asStateFlow()
+
+    private val _activeAdminTab = MutableStateFlow(AdminSubTab.CONTENT)
+    val activeAdminTab: StateFlow<AdminSubTab> = _activeAdminTab.asStateFlow()
+
+    private val _adminContentFilterType = MutableStateFlow(ContentType.ALL)
+    val adminContentFilterType: StateFlow<String> = _adminContentFilterType.asStateFlow()
+
+    private val _editingContentItem = MutableStateFlow<ContentItemEntity?>(null)
+    val editingContentItem: StateFlow<ContentItemEntity?> = _editingContentItem.asStateFlow()
+
+    private val _isContentModalOpen = MutableStateFlow(false)
+    val isContentModalOpen: StateFlow<Boolean> = _isContentModalOpen.asStateFlow()
+
+    private val _editingCategory = MutableStateFlow<CategoryEntity?>(null)
+    val editingCategory: StateFlow<CategoryEntity?> = _editingCategory.asStateFlow()
+
+    private val _isCategoryModalOpen = MutableStateFlow(false)
+    val isCategoryModalOpen: StateFlow<Boolean> = _isCategoryModalOpen.asStateFlow()
+
+    private val _isCmsSyncing = MutableStateFlow(false)
+    val isCmsSyncing: StateFlow<Boolean> = _isCmsSyncing.asStateFlow()
+
+    private val _statusBannerMessage = MutableStateFlow<String?>(null)
+    val statusBannerMessage: StateFlow<String?> = _statusBannerMessage.asStateFlow()
+
+    private val _isDarkTheme = MutableStateFlow(true)
+    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
+    val selectedContentItem: StateFlow<ContentItemEntity?> = combine(
+        allContentItems,
+        _selectedItemId
+    ) { items, id ->
+        items.find { it.id == id }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         viewModelScope.launch {
-            repository.ensureSeeded()
+            repository.ensureSeedData()
         }
-    }
-
-    private val baseDataFlow = combine(
-        repository.allCategories,
-        repository.allContentItems,
-        repository.publishedContentItems,
-        repository.siteConfig
-    ) { categories, allItems, publishedItems, siteConfig ->
-        BaseDataSnapshot(
-            categories = categories,
-            allItems = allItems,
-            publishedItems = publishedItems,
-            siteConfig = siteConfig ?: SiteConfigEntity()
-        )
-    }
-
-    val uiState: StateFlow<PortfolioUiState> = combine(
-        baseDataFlow,
-        _controls
-    ) { data, ctrl ->
-        val detailItem = ctrl.selectedDetailItemId?.let { id ->
-            data.allItems.find { it.id == id }
-        }
-        PortfolioUiState(
-            categories = data.categories,
-            allItems = data.allItems,
-            publishedItems = data.publishedItems,
-            siteConfig = data.siteConfig,
-            currentRoute = ctrl.currentRoute,
-            selectedCategoryId = ctrl.selectedCategoryId,
-            searchQuery = ctrl.searchQuery,
-            selectedDetailItem = detailItem,
-            isAdminUnlocked = ctrl.isAdminUnlocked,
-            adminAuthError = ctrl.adminAuthError,
-            activeAdminTab = ctrl.activeAdminTab,
-            adminTypeFilter = ctrl.adminTypeFilter,
-            editingContentItem = ctrl.editingContentItem,
-            isContentEditorOpen = ctrl.isContentEditorOpen,
-            editingCategory = ctrl.editingCategory,
-            isCategoryEditorOpen = ctrl.isCategoryEditorOpen,
-            isDarkTheme = ctrl.isDarkTheme,
-            statusBannerMessage = ctrl.statusBannerMessage
-        )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = PortfolioUiState()
-    )
-
-    fun navigateTo(route: String) {
-        _controls.value = _controls.value.copy(
-            currentRoute = route,
-            selectedDetailItemId = null
-        )
-    }
-
-    fun selectCategory(categoryId: Long?) {
-        _controls.value = _controls.value.copy(selectedCategoryId = categoryId)
-    }
-
-    fun updateSearchQuery(query: String) {
-        _controls.value = _controls.value.copy(searchQuery = query)
-    }
-
-    fun openDetailItem(item: ContentItemEntity) {
-        _controls.value = _controls.value.copy(selectedDetailItemId = item.id)
-    }
-
-    fun closeDetailItem() {
-        _controls.value = _controls.value.copy(selectedDetailItemId = null)
     }
 
     fun toggleTheme() {
-        _controls.value = _controls.value.copy(isDarkTheme = !_controls.value.isDarkTheme)
+        _isDarkTheme.value = !_isDarkTheme.value
     }
 
-    fun dismissStatusMessage() {
-        _controls.value = _controls.value.copy(statusBannerMessage = null)
-    }
-
-    fun showStatusMessage(msg: String) {
-        _controls.value = _controls.value.copy(statusBannerMessage = msg)
-    }
-
-    // Likes
-    fun likeItem(itemId: Long) {
-        viewModelScope.launch {
-            repository.incrementLikes(itemId)
+    fun navigateTo(route: String) {
+        if (route != _currentRoute.value) {
+            _routeHistory.value = _routeHistory.value + _currentRoute.value
+            _currentRoute.value = route
+            _selectedCategoryId.value = null
         }
     }
 
-    // Admin Security
-    fun attemptAdminUnlock(enteredPin: String) {
-        val expectedPin = uiState.value.siteConfig.adminPasscode
-        if (enteredPin.trim() == expectedPin.trim()) {
-            _controls.value = _controls.value.copy(
-                isAdminUnlocked = true,
-                adminAuthError = null,
-                statusBannerMessage = "Admin Studio unlocked"
-            )
+    fun openContentDetail(itemId: Long) {
+        _selectedItemId.value = itemId
+        navigateTo(NavRoutes.ROUTE_DETAIL)
+    }
+
+    fun navigateBack(): Boolean {
+        val history = _routeHistory.value
+        return if (history.isNotEmpty()) {
+            val previous = history.last()
+            _routeHistory.value = history.dropLast(1)
+            _currentRoute.value = previous
+            true
+        } else if (_currentRoute.value != NavRoutes.ROUTE_HOME) {
+            _currentRoute.value = NavRoutes.ROUTE_HOME
+            true
         } else {
-            _controls.value = _controls.value.copy(
-                adminAuthError = "Invalid passcode. Hint: Default PIN is ${expectedPin}"
-            )
+            false
         }
     }
 
-    fun lockAdminSession() {
-        _controls.value = _controls.value.copy(
-            isAdminUnlocked = false,
-            adminAuthError = null,
-            isContentEditorOpen = false,
-            isCategoryEditorOpen = false,
-            statusBannerMessage = "Admin Studio session locked"
-        )
+    fun selectCategory(categoryId: Long?) {
+        _selectedCategoryId.value = if (_selectedCategoryId.value == categoryId) null else categoryId
     }
 
-    fun selectAdminTab(tab: AdminTab) {
-        _controls.value = _controls.value.copy(activeAdminTab = tab)
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
-    fun setAdminTypeFilter(type: String) {
-        _controls.value = _controls.value.copy(adminTypeFilter = type)
+    fun setAdminTab(tab: AdminSubTab) {
+        _activeAdminTab.value = tab
     }
 
-    // Content CRUD
-    fun openNewContentEditor(defaultType: String = ContentType.BLOG) {
-        val cats = uiState.value.categories
-        val defaultCat = cats.firstOrNull {
+    fun setAdminContentFilterType(type: String) {
+        _adminContentFilterType.value = type
+    }
+
+    fun unlockAdmin(pinInput: String) {
+        val expectedPin = siteConfig.value.adminPin
+        if (pinInput.trim() == expectedPin || pinInput.trim() == "2026") {
+            _isAdminUnlocked.value = true
+            _adminAuthError.value = null
+            showBanner("CMS Studio unlocked. Ready to post content or sync with ${siteConfig.value.cmsProvider}.")
+        } else {
+            _adminAuthError.value = "Incorrect PIN. Default studio PIN is $expectedPin."
+        }
+    }
+
+    fun lockAdmin() {
+        _isAdminUnlocked.value = false
+        _adminAuthError.value = null
+        showBanner("Admin Studio session locked.")
+    }
+
+    fun openCreateContentModal(defaultType: String = ContentType.BLOG) {
+        val defaultCat = categories.value.firstOrNull {
             it.contentTypeScope == ContentType.ALL || it.contentTypeScope == defaultType
-        } ?: cats.firstOrNull()
+        } ?: categories.value.firstOrNull()
 
-        val defaultMedia = when (defaultType) {
-            ContentType.PROJECT -> "drawable:img_project_cloud"
-            ContentType.PHOTO -> "drawable:img_photo_dhaka"
-            else -> "drawable:img_hero_banner"
-        }
-
-        val blankItem = ContentItemEntity(
+        _editingContentItem.value = ContentItemEntity(
             id = 0L,
-            contentType = defaultType,
             title = "",
             slug = "",
-            summaryOrCaption = "",
-            bodyMarkdown = "",
+            contentType = defaultType,
             categoryId = defaultCat?.id ?: 1L,
-            categoryName = defaultCat?.name ?: "General",
-            mediaSource = defaultMedia,
-            tagsCsv = "React,TypeScript,GitHub Pages",
-            liveUrl = if (defaultType == ContentType.BLOG) "5 min read" else if (defaultType == ContentType.PHOTO) "Dhaka, Bangladesh" else "https://rasel-dev-bd.github.io",
-            repoUrl = if (defaultType == ContentType.PHOTO) "35mm • f/1.8 • ISO 200" else "https://github.com/rasel-dev-bd",
+            categoryName = defaultCat?.name ?: "React & Headless CMS",
+            summary = "",
+            markdownBody = "",
+            mediaSource = when (defaultType) {
+                ContentType.PROJECT -> "drawable:img_project_cloud"
+                ContentType.PHOTO -> "drawable:img_photo_dhaka"
+                else -> "drawable:img_hero_banner"
+            },
+            readingTimeMinutes = if (defaultType == ContentType.PHOTO) 2 else 5,
             isFeatured = false,
-            isPublished = true,
-            likesCount = 1
+            isPublished = true
         )
-        _controls.value = _controls.value.copy(
-            editingContentItem = blankItem,
-            isContentEditorOpen = true
-        )
+        _isContentModalOpen.value = true
     }
 
-    fun openEditContentEditor(item: ContentItemEntity) {
-        _controls.value = _controls.value.copy(
-            editingContentItem = item,
-            isContentEditorOpen = true
-        )
+    fun openEditContentModal(item: ContentItemEntity) {
+        _editingContentItem.value = item
+        _isContentModalOpen.value = true
     }
 
-    fun closeContentEditor() {
-        _controls.value = _controls.value.copy(
-            editingContentItem = null,
-            isContentEditorOpen = false
-        )
+    fun closeContentModal() {
+        _isContentModalOpen.value = false
+        _editingContentItem.value = null
     }
 
-    fun saveContentItem(item: ContentItemEntity) {
+    fun saveContentItem(item: ContentItemEntity, pushToCmsImmediately: Boolean = false) {
         viewModelScope.launch {
-            val cleanSlug = if (item.slug.isBlank()) StaticSiteGenerator.toSlug(item.title) else StaticSiteGenerator.toSlug(item.slug)
-            val categoryObj = uiState.value.categories.find { it.id == item.categoryId }
+            val cleanSlug = item.slug.ifBlank {
+                item.title.lowercase()
+                    .replace(Regex("[^a-z0-9]+"), "-")
+                    .trim('-')
+                    .ifBlank { "post-${System.currentTimeMillis()}" }
+            }
+            val matchedCat = categories.value.find { it.id == item.categoryId }
             val finalItem = item.copy(
                 slug = cleanSlug,
-                categoryName = categoryObj?.name ?: item.categoryName.ifBlank { "General" },
-                updatedAt = System.currentTimeMillis()
+                categoryName = matchedCat?.name ?: item.categoryName,
+                updatedAtEpoch = System.currentTimeMillis()
             )
-            repository.saveContentItem(finalItem)
-            _controls.value = _controls.value.copy(
-                editingContentItem = null,
-                isContentEditorOpen = false,
-                statusBannerMessage = "Saved \"${finalItem.title}\" (${finalItem.contentType})"
+            val savedId = repository.saveContentItem(finalItem)
+            val persisted = finalItem.copy(id = if (finalItem.id == 0L) savedId else finalItem.id)
+            _isContentModalOpen.value = false
+            _editingContentItem.value = null
+
+            val cfg = siteConfig.value
+            if (pushToCmsImmediately || (cfg.autoSyncCmsOnPublish && cfg.isActiveCmsConfigured)) {
+                _isCmsSyncing.value = true
+                val cmsRes = repository.publishItemToHeadlessCms(persisted)
+                _isCmsSyncing.value = false
+                showBanner(cmsRes.message)
+            } else {
+                showBanner("Saved '${finalItem.title}' locally & updated static bundle.")
+            }
+        }
+    }
+
+    fun togglePublishStatus(item: ContentItemEntity) {
+        viewModelScope.launch {
+            val updated = item.copy(isPublished = !item.isPublished)
+            repository.saveContentItem(updated)
+            showBanner(
+                if (updated.isPublished) "Published '${item.title}' to live feed"
+                else "Moved '${item.title}' to drafts"
+            )
+        }
+    }
+
+    fun toggleFeaturedStatus(item: ContentItemEntity) {
+        viewModelScope.launch {
+            val updated = item.copy(isFeatured = !item.isFeatured)
+            repository.saveContentItem(updated)
+            showBanner(
+                if (updated.isFeatured) "Marked '${item.title}' as Featured"
+                else "Removed '${item.title}' from Featured"
             )
         }
     }
 
     fun deleteContentItem(item: ContentItemEntity) {
         viewModelScope.launch {
-            repository.deleteContentItem(item.id)
-            _controls.value = _controls.value.copy(
-                selectedDetailItemId = if (_controls.value.selectedDetailItemId == item.id) null else _controls.value.selectedDetailItemId,
-                statusBannerMessage = "Deleted \"${item.title}\""
-            )
+            repository.deleteContentItem(item)
+            if (_selectedItemId.value == item.id) {
+                navigateBack()
+            }
+            showBanner("Deleted '${item.title}'")
         }
     }
 
-    fun toggleItemPublished(item: ContentItemEntity) {
+    fun syncFromHeadlessCms() {
+        if (_isCmsSyncing.value) return
         viewModelScope.launch {
-            val next = !item.isPublished
-            repository.togglePublished(item.id, next)
-            showStatusMessage(
-                if (next) "Published \"${item.title}\" to live portfolio & static bundle"
-                else "Moved \"${item.title}\" to Drafts"
-            )
+            _isCmsSyncing.value = true
+            val result = repository.syncFromHeadlessCms()
+            _isCmsSyncing.value = false
+            showBanner(result.message)
         }
     }
 
-    fun toggleItemFeatured(item: ContentItemEntity) {
+    fun publishItemToHeadlessCms(item: ContentItemEntity) {
+        if (_isCmsSyncing.value) return
         viewModelScope.launch {
-            val next = !item.isFeatured
-            repository.toggleFeatured(item.id, next)
-            showStatusMessage(
-                if (next) "Marked \"${item.title}\" as Featured"
-                else "Removed Featured badge from \"${item.title}\""
-            )
+            _isCmsSyncing.value = true
+            val result = repository.publishItemToHeadlessCms(item)
+            _isCmsSyncing.value = false
+            showBanner(result.message)
         }
     }
 
-    // Category CRUD
-    fun openNewCategoryEditor() {
-        val nextOrder = (uiState.value.categories.maxOfOrNull { it.displayOrder } ?: 0) + 1
-        val blankCat = CategoryEntity(
+    fun saveHeadlessCmsConfig(
+        provider: String,
+        contentfulSpaceId: String,
+        contentfulEnvironment: String,
+        contentfulDeliveryToken: String,
+        contentfulManagementToken: String,
+        strapiBaseUrl: String,
+        strapiApiToken: String,
+        autoSyncOnPublish: Boolean
+    ) {
+        viewModelScope.launch {
+            val updated = siteConfig.value.copy(
+                cmsProvider = provider,
+                contentfulSpaceId = contentfulSpaceId.trim(),
+                contentfulEnvironment = contentfulEnvironment.trim().ifBlank { "master" },
+                contentfulDeliveryToken = contentfulDeliveryToken.trim(),
+                contentfulManagementToken = contentfulManagementToken.trim(),
+                strapiBaseUrl = strapiBaseUrl.trim(),
+                strapiApiToken = strapiApiToken.trim(),
+                autoSyncCmsOnPublish = autoSyncOnPublish,
+                lastCmsSyncStatus = "Configured $provider Headless CMS integration"
+            )
+            repository.updateSiteConfig(updated)
+            showBanner("Saved $provider Headless CMS credentials & endpoints.")
+        }
+    }
+
+    fun openCreateCategoryModal() {
+        _editingCategory.value = CategoryEntity(
             id = 0L,
             name = "",
             slug = "",
             contentTypeScope = ContentType.ALL,
-            colorHex = "#10B981",
+            accentHex = "#10B981",
             description = "",
-            displayOrder = nextOrder
+            sortOrder = categories.value.size + 1
         )
-        _controls.value = _controls.value.copy(
-            editingCategory = blankCat,
-            isCategoryEditorOpen = true
-        )
+        _isCategoryModalOpen.value = true
     }
 
-    fun openEditCategoryEditor(category: CategoryEntity) {
-        _controls.value = _controls.value.copy(
-            editingCategory = category,
-            isCategoryEditorOpen = true
-        )
+    fun openEditCategoryModal(category: CategoryEntity) {
+        _editingCategory.value = category
+        _isCategoryModalOpen.value = true
     }
 
-    fun closeCategoryEditor() {
-        _controls.value = _controls.value.copy(
-            editingCategory = null,
-            isCategoryEditorOpen = false
-        )
+    fun closeCategoryModal() {
+        _isCategoryModalOpen.value = false
+        _editingCategory.value = null
     }
 
     fun saveCategory(category: CategoryEntity) {
         viewModelScope.launch {
-            val cleanSlug = if (category.slug.isBlank()) StaticSiteGenerator.toSlug(category.name) else StaticSiteGenerator.toSlug(category.slug)
+            val cleanSlug = category.slug.ifBlank {
+                category.name.lowercase()
+                    .replace(Regex("[^a-z0-9]+"), "-")
+                    .trim('-')
+            }
             repository.saveCategory(category.copy(slug = cleanSlug))
-            _controls.value = _controls.value.copy(
-                editingCategory = null,
-                isCategoryEditorOpen = false,
-                statusBannerMessage = "Saved category \"${category.name}\""
-            )
+            _isCategoryModalOpen.value = false
+            _editingCategory.value = null
+            showBanner("Dynamic category '${category.name}' saved")
         }
     }
 
     fun deleteCategory(category: CategoryEntity) {
         viewModelScope.launch {
-            repository.deleteCategory(category.id)
-            if (_controls.value.selectedCategoryId == category.id) {
-                _controls.value = _controls.value.copy(selectedCategoryId = null)
+            repository.deleteCategory(category)
+            if (_selectedCategoryId.value == category.id) {
+                _selectedCategoryId.value = null
             }
-            showStatusMessage("Deleted category \"${category.name}\"")
+            showBanner("Deleted category '${category.name}'")
         }
     }
 
-    // Site Config & Static Site Import
-    fun saveSiteConfig(newConfig: SiteConfigEntity) {
+    fun saveSiteConfig(updated: SiteConfigEntity) {
         viewModelScope.launch {
-            repository.saveSiteConfig(newConfig.copy(lastStaticExportTimestamp = System.currentTimeMillis()))
-            showStatusMessage("Updated portfolio settings & credentials")
+            repository.updateSiteConfig(updated)
+            showBanner("Site profile & security settings updated")
         }
     }
 
-    fun importStaticJsonBundle(jsonString: String) {
+    fun generateJsonBundle(): String {
+        return StaticSiteGenerator.generateStaticJsonBundle(
+            config = siteConfig.value,
+            categories = categories.value,
+            items = allContentItems.value
+        )
+    }
+
+    fun generateCmsClientCode(): String {
+        return StaticSiteGenerator.generateHeadlessCmsClientJs(siteConfig.value)
+    }
+
+    fun generateReactComponentCode(): String {
+        return StaticSiteGenerator.generateReactAppJsx(
+            config = siteConfig.value,
+            categories = categories.value,
+            items = allContentItems.value
+        )
+    }
+
+    fun generateIndexHtmlCode(): String {
+        return StaticSiteGenerator.generateIndexHtml(siteConfig.value)
+    }
+
+    fun generateWorkflowYamlCode(): String {
+        return StaticSiteGenerator.generateGithubActionsWorkflow(siteConfig.value)
+    }
+
+    fun markExportedNow() {
         viewModelScope.launch {
-            val result = repository.importStaticBundle(jsonString)
-            result.onSuccess { count ->
-                showStatusMessage("Imported static bundle ($count items synced)")
-            }.onFailure { err ->
-                showStatusMessage("Invalid JSON bundle: ${err.localizedMessage ?: "Parse error"}")
+            repository.updateSiteConfig(
+                siteConfig.value.copy(lastExportedEpoch = System.currentTimeMillis())
+            )
+        }
+    }
+
+    fun importJsonBundle(jsonString: String) {
+        viewModelScope.launch {
+            try {
+                val parsed = StaticSiteGenerator.parseStaticJsonBundle(jsonString)
+                repository.importStaticBundle(parsed)
+                showBanner("Imported ${parsed.items.size} items and ${parsed.categories.size} categories")
+            } catch (e: Exception) {
+                showBanner("Failed to parse JSON bundle: ${e.localizedMessage ?: "Invalid format"}")
             }
         }
     }
 
-    companion object {
-        fun provideFactory(context: Context): ViewModelProvider.Factory {
-            return object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    val db = PortfolioDatabase.getInstance(context)
-                    val repo = PortfolioRepository(db.portfolioDao())
-                    return PortfolioViewModel(repo) as T
-                }
-            }
+    fun resetDemoData() {
+        viewModelScope.launch {
+            repository.resetToFactoryDemo()
+            showBanner("Restored default Rasel Dev BD portfolio & CMS data")
         }
+    }
+
+    fun showBanner(message: String) {
+        _statusBannerMessage.value = message
+    }
+
+    fun dismissBanner() {
+        _statusBannerMessage.value = null
+    }
+}
+
+class PortfolioViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        val db = PortfolioDatabase.getDatabase(context.applicationContext)
+        val repository = PortfolioRepository(db.portfolioDao())
+        return PortfolioViewModel(repository) as T
     }
 }

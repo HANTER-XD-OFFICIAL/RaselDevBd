@@ -1,15 +1,10 @@
 package com.example.data
 
-import android.content.Context
-import com.example.R
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 data class ParsedStaticBundle(
     val config: SiteConfigEntity?,
@@ -19,507 +14,558 @@ data class ParsedStaticBundle(
 
 object StaticSiteGenerator {
 
-    private fun formatIsoDate(timestamp: Long): String {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-        return sdf.format(Date(timestamp))
-    }
-
-    fun toSlug(input: String): String {
-        return input.lowercase(Locale.US)
-            .replace(Regex("[^a-z0-9]+"), "-")
-            .trim('-')
-            .ifBlank { "item-${System.currentTimeMillis() % 10000}" }
-    }
-
     fun generateStaticJsonBundle(
         config: SiteConfigEntity,
         categories: List<CategoryEntity>,
-        publishedItems: List<ContentItemEntity>
+        items: List<ContentItemEntity>
     ): String {
         val root = JSONObject()
-        root.put("schemaVersion", "1.0.0")
-        root.put("generator", "Rasel Dev BD Static Site Engine (GitHub Pages Compatible)")
-        root.put("generatedAt", formatIsoDate(System.currentTimeMillis()))
+        val isoFormatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
 
-        val siteObj = JSONObject().apply {
+        root.put("schemaVersion", "2.0.0-headless-cms")
+        root.put("generatedBy", "Rasel Dev BD — Headless CMS & GitHub Pages Engine")
+        root.put("generatedAtIso", isoFormatter.format(Date()))
+
+        val cmsMeta = JSONObject().apply {
+            put("provider", config.cmsProvider)
+            put("contentfulSpaceId", config.contentfulSpaceId)
+            put("contentfulEnvironment", config.contentfulEnvironment)
+            put("strapiBaseUrl", config.strapiBaseUrl)
+            put("supportsDirectPublishing", true)
+        }
+        root.put("headlessCms", cmsMeta)
+
+        val siteMeta = JSONObject().apply {
             put("siteTitle", config.siteTitle)
             put("tagline", config.tagline)
+            put("ownerName", config.ownerName)
+            put("ownerRole", config.ownerRole)
             put("bio", config.bio)
-            put("githubUsername", config.githubUsername)
-            put("githubPagesDomain", config.githubPagesDomain)
-            put("email", config.email)
             put("location", config.location)
-            put("adminPasscode", config.adminPasscode)
-            put("skills", JSONArray(config.skillsCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }))
+            put("email", config.email)
+            put("githubUrl", config.githubUrl)
+            put("githubPagesRepo", config.githubPagesRepo)
+            put("customDomain", config.customDomain)
         }
-        root.put("siteConfig", siteObj)
+        root.put("siteConfig", siteMeta)
 
-        val categoriesArray = JSONArray()
-        categories.forEach { cat ->
+        val catArray = JSONArray()
+        categories.sortedBy { it.sortOrder }.forEach { cat ->
             val catObj = JSONObject().apply {
                 put("id", cat.id)
                 put("name", cat.name)
                 put("slug", cat.slug)
                 put("contentTypeScope", cat.contentTypeScope)
-                put("colorHex", cat.colorHex)
+                put("accentHex", cat.accentHex)
                 put("description", cat.description)
-                put("displayOrder", cat.displayOrder)
+                put("sortOrder", cat.sortOrder)
             }
-            categoriesArray.put(catObj)
+            catArray.put(catObj)
         }
-        root.put("categories", categoriesArray)
+        root.put("categories", catArray)
 
         val itemsArray = JSONArray()
-        publishedItems.forEach { item ->
-            val staticMediaPath = when {
-                item.mediaSource.startsWith("drawable:") ->
-                    "./assets/images/${item.mediaSource.removePrefix("drawable:")}.jpg"
-                item.mediaSource.startsWith("content://") || item.mediaSource.startsWith("file://") ->
-                    "./assets/uploads/${item.slug}.jpg"
-                else -> item.mediaSource
-            }
+        items.filter { it.isPublished }.forEach { item ->
             val itemObj = JSONObject().apply {
                 put("id", item.id)
-                put("contentType", item.contentType)
                 put("title", item.title)
                 put("slug", item.slug)
-                put("summaryOrCaption", item.summaryOrCaption)
-                put("bodyMarkdown", item.bodyMarkdown)
+                put("contentType", item.contentType)
                 put("categoryId", item.categoryId)
                 put("categoryName", item.categoryName)
-                put("mediaSource", item.mediaSource)
-                put("staticAssetPath", staticMediaPath)
-                put("tags", JSONArray(item.tagsCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }))
-                put("liveUrl", item.liveUrl)
+                put("summary", item.summary)
+                put("markdownBody", item.markdownBody)
+                put("mediaUrl", resolveWebMediaPath(item.mediaSource))
+                put("rawMediaSource", item.mediaSource)
+                put("photoCaption", item.photoCaption)
+                put("photoLocation", item.photoLocation)
+                put("exifCamera", item.exifCamera)
+                put("techStack", JSONArray(item.techStackCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }))
+                put("liveDemoUrl", item.liveDemoUrl)
                 put("repoUrl", item.repoUrl)
+                put("readingTimeMinutes", item.readingTimeMinutes)
                 put("isFeatured", item.isFeatured)
                 put("isPublished", item.isPublished)
-                put("likesCount", item.likesCount)
-                put("createdAt", item.createdAt)
-                put("publishedDateIso", formatIsoDate(item.createdAt))
+                put("createdAtEpoch", item.createdAtEpoch)
+                put("updatedAtEpoch", item.updatedAtEpoch)
+                put("cmsEntryId", item.cmsEntryId)
+                put("cmsProvider", item.cmsProvider)
             }
             itemsArray.put(itemObj)
         }
-        root.put("contentItems", itemsArray)
+        root.put("items", itemsArray)
 
         return root.toString(2)
     }
 
-    fun parseStaticJsonBundle(jsonString: String, existingPasscode: String): ParsedStaticBundle {
+    fun parseStaticJsonBundle(jsonString: String): ParsedStaticBundle {
         val root = JSONObject(jsonString)
+
         val siteObj = root.optJSONObject("siteConfig")
+        val cmsObj = root.optJSONObject("headlessCms")
         val parsedConfig = if (siteObj != null) {
-            val skillsArr = siteObj.optJSONArray("skills")
-            val skillsList = mutableListOf<String>()
-            if (skillsArr != null) {
-                for (i in 0 until skillsArr.length()) {
-                    skillsList.add(skillsArr.optString(i))
-                }
-            }
             SiteConfigEntity(
                 id = 1,
                 siteTitle = siteObj.optString("siteTitle", "Rasel Dev BD"),
                 tagline = siteObj.optString("tagline", ""),
+                ownerName = siteObj.optString("ownerName", "Rasel Chowdhury"),
+                ownerRole = siteObj.optString("ownerRole", "Senior Full-Stack Engineer"),
                 bio = siteObj.optString("bio", ""),
-                githubUsername = siteObj.optString("githubUsername", "rasel-dev-bd"),
-                githubPagesDomain = siteObj.optString("githubPagesDomain", "https://rasel-dev-bd.github.io"),
-                email = siteObj.optString("email", "alexraselchodhury@gmail.com"),
                 location = siteObj.optString("location", "Dhaka, Bangladesh"),
-                skillsCsv = skillsList.joinToString(","),
-                adminPasscode = siteObj.optString("adminPasscode", existingPasscode).ifBlank { existingPasscode },
-                lastStaticExportTimestamp = System.currentTimeMillis()
+                email = siteObj.optString("email", "alexraselchodhury@gmail.com"),
+                githubUrl = siteObj.optString("githubUrl", "https://github.com/raseldevbd"),
+                githubPagesRepo = siteObj.optString("githubPagesRepo", "raseldevbd/raseldevbd.github.io"),
+                customDomain = siteObj.optString("customDomain", "raseldevbd.github.io"),
+                cmsProvider = cmsObj?.optString("provider", CmsProviderType.CONTENTFUL) ?: CmsProviderType.CONTENTFUL,
+                contentfulSpaceId = cmsObj?.optString("contentfulSpaceId", "") ?: "",
+                contentfulEnvironment = cmsObj?.optString("contentfulEnvironment", "master") ?: "master",
+                strapiBaseUrl = cmsObj?.optString("strapiBaseUrl", "https://cms.raseldevbd.com") ?: "https://cms.raseldevbd.com"
             )
         } else null
 
-        val catsArr = root.optJSONArray("categories") ?: JSONArray()
         val parsedCategories = mutableListOf<CategoryEntity>()
-        for (i in 0 until catsArr.length()) {
-            val c = catsArr.getJSONObject(i)
+        val catArray = root.optJSONArray("categories") ?: JSONArray()
+        for (i in 0 until catArray.length()) {
+            val c = catArray.getJSONObject(i)
             parsedCategories.add(
                 CategoryEntity(
-                    id = c.optLong("id", 0L),
-                    name = c.optString("name", "General"),
-                    slug = c.optString("slug", "general"),
+                    id = c.optLong("id", (i + 1).toLong()),
+                    name = c.optString("name", "Category"),
+                    slug = c.optString("slug", "category-$i"),
                     contentTypeScope = c.optString("contentTypeScope", ContentType.ALL),
-                    colorHex = c.optString("colorHex", "#10B981"),
+                    accentHex = c.optString("accentHex", "#10B981"),
                     description = c.optString("description", ""),
-                    displayOrder = c.optInt("displayOrder", i + 1)
+                    sortOrder = c.optInt("sortOrder", i)
                 )
             )
         }
 
-        val itemsArr = root.optJSONArray("contentItems") ?: JSONArray()
         val parsedItems = mutableListOf<ContentItemEntity>()
-        for (i in 0 until itemsArr.length()) {
-            val item = itemsArr.getJSONObject(i)
-            val tagsArr = item.optJSONArray("tags")
-            val tagsList = mutableListOf<String>()
-            if (tagsArr != null) {
-                for (j in 0 until tagsArr.length()) {
-                    tagsList.add(tagsArr.optString(j))
-                }
+        val itemsArray = root.optJSONArray("items") ?: JSONArray()
+        for (i in 0 until itemsArray.length()) {
+            val item = itemsArray.getJSONObject(i)
+            val techArr = item.optJSONArray("techStack")
+            val techCsv = if (techArr != null) {
+                (0 until techArr.length()).joinToString(",") { techArr.optString(it) }
+            } else {
+                item.optString("techStackCsv", "")
             }
             parsedItems.add(
                 ContentItemEntity(
-                    id = item.optLong("id", 0L),
-                    contentType = item.optString("contentType", ContentType.BLOG),
+                    id = item.optLong("id", (i + 1).toLong()),
                     title = item.optString("title", "Untitled"),
-                    slug = item.optString("slug", "untitled-$i"),
-                    summaryOrCaption = item.optString("summaryOrCaption", ""),
-                    bodyMarkdown = item.optString("bodyMarkdown", ""),
+                    slug = item.optString("slug", "item-$i"),
+                    contentType = item.optString("contentType", ContentType.BLOG),
                     categoryId = item.optLong("categoryId", 1L),
                     categoryName = item.optString("categoryName", "General"),
-                    mediaSource = item.optString("mediaSource", "drawable:img_hero_banner"),
-                    tagsCsv = tagsList.joinToString(","),
-                    liveUrl = item.optString("liveUrl", ""),
+                    summary = item.optString("summary", ""),
+                    markdownBody = item.optString("markdownBody", ""),
+                    mediaSource = item.optString("rawMediaSource", item.optString("mediaUrl", "drawable:img_project_cloud")),
+                    photoCaption = item.optString("photoCaption", ""),
+                    photoLocation = item.optString("photoLocation", ""),
+                    exifCamera = item.optString("exifCamera", ""),
+                    techStackCsv = techCsv,
+                    liveDemoUrl = item.optString("liveDemoUrl", ""),
                     repoUrl = item.optString("repoUrl", ""),
+                    readingTimeMinutes = item.optInt("readingTimeMinutes", 4),
                     isFeatured = item.optBoolean("isFeatured", false),
                     isPublished = item.optBoolean("isPublished", true),
-                    likesCount = item.optInt("likesCount", 0),
-                    createdAt = item.optLong("createdAt", System.currentTimeMillis()),
-                    updatedAt = System.currentTimeMillis()
+                    createdAtEpoch = item.optLong("createdAtEpoch", System.currentTimeMillis()),
+                    updatedAtEpoch = item.optLong("updatedAtEpoch", System.currentTimeMillis()),
+                    cmsEntryId = item.optString("cmsEntryId", ""),
+                    cmsProvider = item.optString("cmsProvider", "")
                 )
             )
         }
 
-        return ParsedStaticBundle(
-            config = parsedConfig,
-            categories = parsedCategories,
-            items = parsedItems
-        )
+        return ParsedStaticBundle(parsedConfig, parsedCategories, parsedItems)
     }
 
-    fun generateStandaloneIndexHtml(
-        config: SiteConfigEntity,
-        categories: List<CategoryEntity>,
-        publishedItems: List<ContentItemEntity>
-    ): String {
-        val embeddedJson = generateStaticJsonBundle(config, categories, publishedItems)
+    fun generateHeadlessCmsClientJs(config: SiteConfigEntity): String {
         return """
-<!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${config.siteTitle} — ${config.tagline}</title>
-  <meta name="description" content="${config.bio}" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-</head>
-<body class="bg-[#090E1A] text-slate-100 antialiased selection:bg-emerald-500 selection:text-slate-950">
-  <div id="root"></div>
-  <script id="initial-bundle" type="application/json">
-$embeddedJson
-  </script>
-  <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
-    const STORAGE_KEY = 'rasel_dev_bd_static_cms_v1';
-    const INITIAL_DATA = JSON.parse(document.getElementById('initial-bundle').textContent);
+/**
+ * Rasel Dev BD — Headless CMS Integration Client (Contentful & Strapi)
+ * Allows fetching and posting blogs, project showcases, and photos with captions
+ * directly to Contentful or Strapi without changing code or redeploying GitHub Pages.
+ */
 
-    function toSlug(str) {
-      return (str || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || ('item-' + Date.now());
+const STORAGE_KEY = 'rasel_dev_bd_cms_settings_v2';
+
+export function getCmsConfig() {
+  const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+  const parsed = saved ? JSON.parse(saved) : {};
+  const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
+
+  return {
+    provider: parsed.provider || env.VITE_CMS_PROVIDER || '${config.cmsProvider}',
+    contentfulSpaceId: parsed.contentfulSpaceId || env.VITE_CONTENTFUL_SPACE_ID || '${config.contentfulSpaceId}',
+    contentfulEnvironment: parsed.contentfulEnvironment || env.VITE_CONTENTFUL_ENVIRONMENT || '${config.contentfulEnvironment}',
+    contentfulDeliveryToken: parsed.contentfulDeliveryToken || env.VITE_CONTENTFUL_DELIVERY_TOKEN || '',
+    contentfulManagementToken: parsed.contentfulManagementToken || env.VITE_CONTENTFUL_MANAGEMENT_TOKEN || '',
+    strapiBaseUrl: parsed.strapiBaseUrl || env.VITE_STRAPI_BASE_URL || '${config.strapiBaseUrl}',
+    strapiApiToken: parsed.strapiApiToken || env.VITE_STRAPI_API_TOKEN || '',
+  };
+}
+
+export function saveCmsConfig(newConfig) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newConfig));
+  }
+}
+
+export async function fetchHeadlessContent(customConfig) {
+  const cfg = customConfig || getCmsConfig();
+  if (cfg.provider === 'STRAPI') {
+    return fetchFromStrapi(cfg);
+  }
+  return fetchFromContentful(cfg);
+}
+
+export async function publishToHeadlessCms(postItem, customConfig) {
+  const cfg = customConfig || getCmsConfig();
+  if (cfg.provider === 'STRAPI') {
+    return publishToStrapi(postItem, cfg);
+  }
+  return publishToContentful(postItem, cfg);
+}
+
+async function fetchFromContentful(cfg) {
+  if (!cfg.contentfulSpaceId || !cfg.contentfulDeliveryToken) {
+    throw new Error('Contentful Space ID and Delivery Token are not configured.');
+  }
+  const env = cfg.contentfulEnvironment || 'master';
+  const url = `https://cdn.contentful.com/spaces/${'$'}{cfg.contentfulSpaceId}/environments/${'$'}{env}/entries?include=2&limit=100`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${'$'}{cfg.contentfulDeliveryToken}` }
+  });
+  if (!res.ok) {
+    throw new Error(`Contentful CDA HTTP ${'$'}{res.status}`);
+  }
+  const data = await res.json();
+  const assetMap = {};
+  (data.includes?.Asset || []).forEach((asset) => {
+    const fileUrl = asset.fields?.file?.url || '';
+    if (asset.sys?.id && fileUrl) {
+      assetMap[asset.sys.id] = fileUrl.startsWith('//') ? `https:${'$'}{fileUrl}` : fileUrl;
     }
+  });
 
-    function RaselDevBDApp() {
-      const [siteConfig, setSiteConfig] = useState(INITIAL_DATA.siteConfig);
-      const [categories, setCategories] = useState(INITIAL_DATA.categories || []);
-      const [items, setItems] = useState(INITIAL_DATA.contentItems || []);
-      const [activeNav, setActiveNav] = useState('HOME');
-      const [selectedCat, setSelectedCat] = useState(null);
-      const [searchQuery, setSearchQuery] = useState('');
-      const [detailItem, setDetailItem] = useState(null);
-      const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
-      const [pinInput, setPinInput] = useState('');
+  return (data.items || []).map((entry, idx) => {
+    const f = entry.fields || {};
+    const assetId = f.media?.sys?.id;
+    return {
+      id: entry.sys?.id || `cf-${'$'}{idx}`,
+      cmsEntryId: entry.sys?.id || '',
+      cmsProvider: 'CONTENTFUL',
+      title: f.title || 'Untitled Entry',
+      slug: f.slug || `entry-${'$'}{idx}`,
+      contentType: (f.contentType || 'BLOG').toUpperCase(),
+      categoryName: f.categoryName || 'React & Headless CMS',
+      summary: f.summary || '',
+      markdownBody: f.markdownBody || f.body || '',
+      mediaUrl: f.mediaSource || assetMap[assetId] || '',
+      photoCaption: f.photoCaption || '',
+      photoLocation: f.photoLocation || '',
+      exifCamera: f.exifCamera || '',
+      techStack: typeof f.techStackCsv === 'string'
+        ? f.techStackCsv.split(',').map((s) => s.trim()).filter(Boolean)
+        : (f.techStack || []),
+      liveDemoUrl: f.liveDemoUrl || '',
+      repoUrl: f.repoUrl || '',
+      readingTimeMinutes: f.readingTimeMinutes || 5,
+      isFeatured: Boolean(f.isFeatured),
+      isPublished: true
+    };
+  });
+}
 
-      useEffect(() => {
-        fetch('./data/content-bundle.json')
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.siteConfig) setSiteConfig(data.siteConfig);
-            if (Array.isArray(data.categories)) setCategories(data.categories);
-            if (Array.isArray(data.contentItems)) setItems(data.contentItems);
-          })
-          .catch(() => {});
-      }, []);
-
-      const published = useMemo(() => items.filter((i) => i.isPublished !== false), [items]);
-      const filtered = useMemo(() => {
-        return published.filter((item) => {
-          const matchesType = activeNav === 'HOME' || activeNav === 'ADMIN' || item.contentType === activeNav;
-          const matchesCat = selectedCat === null || Number(item.categoryId) === Number(selectedCat);
-          const q = searchQuery.toLowerCase();
-          const matchesQuery = !q || (item.title || '').toLowerCase().includes(q) || (item.summaryOrCaption || '').toLowerCase().includes(q);
-          return matchesType && matchesCat && matchesQuery;
-        });
-      }, [published, activeNav, selectedCat, searchQuery]);
-
-      const exportJson = () => {
-        const blob = new Blob([JSON.stringify({ schemaVersion: '1.0.0', siteConfig, categories, contentItems: items }, null, 2)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'content-bundle.json';
-        a.click();
-      };
-
-      return (
-        <div className="min-h-screen flex flex-col bg-[#090E1A] text-slate-100">
-          <header className="border-b border-slate-800 bg-[#111827]/90 backdrop-blur sticky top-0 z-30">
-            <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-              <div onClick={() => { setActiveNav('HOME'); setDetailItem(null); }} className="flex items-center gap-3 cursor-pointer">
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-mono font-bold">&lt;R/&gt;</span>
-                <div>
-                  <h1 className="text-xl font-bold">{siteConfig.siteTitle}</h1>
-                  <p className="text-xs text-slate-400">{siteConfig.location}</p>
-                </div>
-              </div>
-              <nav className="flex gap-2 flex-wrap">
-                {['HOME', 'PROJECT', 'BLOG', 'PHOTO', 'ADMIN'].map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => { setActiveNav(tab); setDetailItem(null); }}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-mono ${'$'}{activeNav === tab ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-300'}`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </nav>
-            </div>
-          </header>
-
-          <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
-            {detailItem ? (
-              <div className="max-w-3xl mx-auto bg-[#111827] border border-slate-800 rounded-3xl overflow-hidden p-6 space-y-4">
-                <button onClick={() => setDetailItem(null)} className="px-4 py-1.5 rounded-xl bg-slate-800 text-xs font-mono">← Back</button>
-                <img src={detailItem.staticAssetPath} alt={detailItem.title} className="w-full h-72 object-cover rounded-2xl bg-slate-900" />
-                <div className="text-xs font-mono text-emerald-400">{detailItem.contentType} • {detailItem.categoryName}</div>
-                <h2 className="text-2xl font-bold">{detailItem.title}</h2>
-                <p className="text-slate-300">{detailItem.summaryOrCaption}</p>
-                <pre className="whitespace-pre-wrap text-sm text-slate-200 font-sans pt-4 border-t border-slate-800">{detailItem.bodyMarkdown}</pre>
-              </div>
-            ) : activeNav === 'ADMIN' ? (
-              !isAdminUnlocked ? (
-                <div className="max-w-md mx-auto my-12 p-8 rounded-3xl bg-[#111827] border border-emerald-500/40 text-center space-y-4">
-                  <h2 className="text-2xl font-bold">Admin Studio Security</h2>
-                  <input
-                    type="password"
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value)}
-                    placeholder="Enter Admin PIN"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-center font-mono"
-                  />
-                  <button
-                    onClick={() => { if (pinInput === (siteConfig.adminPasscode || '2026')) setIsAdminUnlocked(true); }}
-                    className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-sm"
-                  >
-                    Unlock Admin Studio
-                  </button>
-                  <button
-                    onClick={() => { setPinInput(siteConfig.adminPasscode || '2026'); setIsAdminUnlocked(true); }}
-                    className="w-full py-2 rounded-xl bg-slate-800 text-slate-300 font-mono text-xs"
-                  >
-                    Quick Auto-Fill & Unlock (PIN: {siteConfig.adminPasscode || '2026'})
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center bg-[#111827] p-5 rounded-2xl border border-slate-800">
-                    <h2 className="text-xl font-bold text-emerald-400">Admin Studio • Static Site Manager</h2>
-                    <button onClick={exportJson} className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-mono font-bold text-xs">
-                      Download content-bundle.json
-                    </button>
-                  </div>
-                </div>
-              )
-            ) : (
-              <div className="space-y-8">
-                <section className="rounded-3xl bg-gradient-to-br from-slate-900 via-[#0F172A] to-emerald-950/40 border border-slate-800 p-8">
-                  <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-mono mb-3">
-                    GITHUB PAGES READY • {siteConfig.githubPagesDomain}
-                  </span>
-                  <h2 className="text-3xl font-bold mb-2">{siteConfig.tagline}</h2>
-                  <p className="text-slate-300 max-w-3xl mb-5">{siteConfig.bio}</p>
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search blogs, photos, or projects..."
-                    className="w-full max-w-md px-4 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-sm"
-                  />
-                </section>
-
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  <button
-                    onClick={() => setSelectedCat(null)}
-                    className={`px-4 py-2 rounded-xl text-xs font-mono shrink-0 ${'$'}{selectedCat === null ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-300'}`}
-                  >
-                    All Categories ({categories.length})
-                  </button>
-                  {categories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setSelectedCat(selectedCat === cat.id ? null : cat.id)}
-                      className={`px-4 py-2 rounded-xl text-xs font-mono shrink-0 ${'$'}{Number(selectedCat) === Number(cat.id) ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-300'}`}
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filtered.map((item) => (
-                    <article
-                      key={item.id}
-                      onClick={() => setDetailItem(item)}
-                      className="cursor-pointer rounded-2xl bg-[#111827] border border-slate-800 overflow-hidden flex flex-col justify-between hover:border-emerald-500/50 transition"
-                    >
-                      <div>
-                        <img src={item.staticAssetPath} alt={item.title} className="w-full h-48 object-cover bg-slate-900" />
-                        <div className="p-5">
-                          <div className="flex justify-between text-xs font-mono text-emerald-400 mb-2">
-                            <span>{item.contentType}</span>
-                            <span>{item.categoryName}</span>
-                          </div>
-                          <h3 className="text-lg font-bold mb-2">{item.title}</h3>
-                          <p className="text-sm text-slate-300 line-clamp-3">{item.summaryOrCaption}</p>
-                        </div>
-                      </div>
-                      <div className="px-5 py-3 border-t border-slate-800 flex justify-between text-xs font-mono text-slate-400">
-                        <span>{item.liveUrl || (item.publishedDateIso || '').slice(0, 10)}</span>
-                        <span>♥ {item.likesCount}</span>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            )}
-          </main>
-        </div>
-      );
+async function publishToContentful(item, cfg) {
+  if (!cfg.contentfulSpaceId || !cfg.contentfulManagementToken) {
+    throw new Error('Contentful Space ID and Management Token (CMA) are required to publish.');
+  }
+  const env = cfg.contentfulEnvironment || 'master';
+  const loc = (v) => ({ 'en-US': v });
+  const body = {
+    fields: {
+      title: loc(item.title),
+      slug: loc(item.slug),
+      contentType: loc(item.contentType),
+      categoryName: loc(item.categoryName),
+      summary: loc(item.summary || ''),
+      markdownBody: loc(item.markdownBody || ''),
+      mediaSource: loc(item.mediaUrl || ''),
+      photoCaption: loc(item.photoCaption || ''),
+      photoLocation: loc(item.photoLocation || ''),
+      exifCamera: loc(item.exifCamera || ''),
+      techStackCsv: loc((item.techStack || []).join(',')),
+      liveDemoUrl: loc(item.liveDemoUrl || ''),
+      repoUrl: loc(item.repoUrl || ''),
+      readingTimeMinutes: loc(Number(item.readingTimeMinutes || 5)),
+      isFeatured: loc(Boolean(item.isFeatured))
     }
+  };
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<RaselDevBDApp />);
-  </script>
-</body>
-</html>
-        """.trimIndent()
+  const createRes = await fetch(
+    `https://api.contentful.com/spaces/${'$'}{cfg.contentfulSpaceId}/environments/${'$'}{env}/entries`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${'$'}{cfg.contentfulManagementToken}`,
+        'Content-Type': 'application/vnd.contentful.management.v1+json',
+        'X-Contentful-Content-Type': 'portfolioItem'
+      },
+      body: JSON.stringify(body)
+    }
+  );
+  if (!createRes.ok) {
+    throw new Error(`Contentful CMA HTTP ${'$'}{createRes.status}`);
+  }
+  const created = await createRes.json();
+  const entryId = created.sys?.id;
+  const version = created.sys?.version || 1;
+
+  if (entryId) {
+    await fetch(
+      `https://api.contentful.com/spaces/${'$'}{cfg.contentfulSpaceId}/environments/${'$'}{env}/entries/${'$'}{entryId}/published`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${'$'}{cfg.contentfulManagementToken}`,
+          'X-Contentful-Version': String(version)
+        }
+      }
+    );
+  }
+  return { entryId, provider: 'CONTENTFUL' };
+}
+
+async function fetchFromStrapi(cfg) {
+  const base = (cfg.strapiBaseUrl || '').replace(/\/+$/, '');
+  if (!base.startsWith('http')) {
+    throw new Error('Strapi Base URL is not configured.');
+  }
+  const headers = { Accept: 'application/json' };
+  if (cfg.strapiApiToken) {
+    headers.Authorization = `Bearer ${'$'}{cfg.strapiApiToken}`;
+  }
+  const res = await fetch(`${'$'}{base}/api/portfolio-items?populate=*&sort=updatedAt:desc`, { headers });
+  if (!res.ok) {
+    throw new Error(`Strapi REST HTTP ${'$'}{res.status}`);
+  }
+  const json = await res.json();
+  return (json.data || []).map((row, idx) => {
+    const a = row.attributes || row;
+    return {
+      id: row.documentId || row.id || `strapi-${'$'}{idx}`,
+      cmsEntryId: String(row.documentId || row.id || ''),
+      cmsProvider: 'STRAPI',
+      title: a.title || 'Untitled',
+      slug: a.slug || `post-${'$'}{idx}`,
+      contentType: (a.contentType || 'BLOG').toUpperCase(),
+      categoryName: a.categoryName || 'React & Headless CMS',
+      summary: a.summary || '',
+      markdownBody: a.markdownBody || a.body || '',
+      mediaUrl: a.mediaSource || '',
+      photoCaption: a.photoCaption || '',
+      photoLocation: a.photoLocation || '',
+      exifCamera: a.exifCamera || '',
+      techStack: typeof a.techStackCsv === 'string'
+        ? a.techStackCsv.split(',').map((s) => s.trim()).filter(Boolean)
+        : (a.techStack || []),
+      liveDemoUrl: a.liveDemoUrl || '',
+      repoUrl: a.repoUrl || '',
+      readingTimeMinutes: a.readingTimeMinutes || 5,
+      isFeatured: Boolean(a.isFeatured),
+      isPublished: true
+    };
+  });
+}
+
+async function publishToStrapi(item, cfg) {
+  const base = (cfg.strapiBaseUrl || '').replace(/\/+$/, '');
+  if (!base.startsWith('http') || !cfg.strapiApiToken) {
+    throw new Error('Strapi Base URL and API Token are required to publish.');
+  }
+  const res = await fetch(`${'$'}{base}/api/portfolio-items`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${'$'}{cfg.strapiApiToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      data: {
+        title: item.title,
+        slug: item.slug,
+        contentType: item.contentType,
+        categoryName: item.categoryName,
+        summary: item.summary || '',
+        markdownBody: item.markdownBody || '',
+        mediaSource: item.mediaUrl || '',
+        photoCaption: item.photoCaption || '',
+        photoLocation: item.photoLocation || '',
+        exifCamera: item.exifCamera || '',
+        techStackCsv: (item.techStack || []).join(','),
+        liveDemoUrl: item.liveDemoUrl || '',
+        repoUrl: item.repoUrl || '',
+        readingTimeMinutes: Number(item.readingTimeMinutes || 5),
+        isFeatured: Boolean(item.isFeatured)
+      }
+    })
+  });
+  if (!res.ok) {
+    throw new Error(`Strapi POST HTTP ${'$'}{res.status}`);
+  }
+  const created = await res.json();
+  return { entryId: created.data?.documentId || created.data?.id || '', provider: 'STRAPI' };
+}
+""".trimIndent()
     }
 
     fun generateReactAppJsx(
         config: SiteConfigEntity,
         categories: List<CategoryEntity>,
-        publishedItems: List<ContentItemEntity>
+        items: List<ContentItemEntity>
     ): String {
-        val projectsCount = publishedItems.count { it.contentType == ContentType.PROJECT }
-        val blogsCount = publishedItems.count { it.contentType == ContentType.BLOG }
-        val photosCount = publishedItems.count { it.contentType == ContentType.PHOTO }
-
         return """
-// src/App.jsx — Generated by ${config.siteTitle} Static Site Generator
-// Compatible with Vite + React 19 + GitHub Pages (${config.githubPagesDomain})
 import React, { useState, useEffect, useMemo } from 'react';
+import {
+  getCmsConfig,
+  saveCmsConfig,
+  fetchHeadlessContent,
+  publishToHeadlessCms
+} from './cmsClient';
 
-export default function RaselDevBDApp() {
-  const [bundle, setBundle] = useState(null);
-  const [activeType, setActiveType] = useState('ALL'); // ALL | PROJECT | BLOG | PHOTO
-  const [activeCategory, setActiveCategory] = useState('all');
+export default function App() {
+  const [siteData, setSiteData] = useState(null);
+  const [activeTab, setActiveTab] = useState('ALL');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [cmsConfig, setCmsConfig] = useState(() => getCmsConfig());
+  const [cmsStatus, setCmsStatus] = useState('Hybrid Mode • Contentful / Strapi + Static JSON');
+  const [showCmsModal, setShowCmsModal] = useState(false);
+  const [showComposerModal, setShowComposerModal] = useState(false);
 
+  // Load fallback static bundle first, then hydrate live from Contentful or Strapi
   useEffect(() => {
     fetch('./data/content-bundle.json')
       .then((res) => res.json())
-      .then((data) => setBundle(data))
-      .catch((err) => console.error('Failed to load static bundle:', err));
+      .then((bundle) => {
+        setSiteData(bundle);
+        return syncWithHeadlessCms(bundle);
+      })
+      .catch(() => {});
   }, []);
 
-  const categories = bundle?.categories || [];
-  const items = bundle?.contentItems || [];
-  const site = bundle?.siteConfig || {
-    siteTitle: "${config.siteTitle.replace("\"", "\\\"")}",
-    tagline: "${config.tagline.replace("\"", "\\\"")}",
-    location: "${config.location.replace("\"", "\\\"")}",
-    email: "${config.email.replace("\"", "\\\"")}"
-  };
+  async function syncWithHeadlessCms(baseBundle) {
+    const cfg = getCmsConfig();
+    const hasContentful = cfg.provider === 'CONTENTFUL' && cfg.contentfulSpaceId && cfg.contentfulDeliveryToken;
+    const hasStrapi = cfg.provider === 'STRAPI' && cfg.strapiBaseUrl && cfg.strapiApiToken;
+    if (!hasContentful && !hasStrapi) {
+      setCmsStatus(`Static Snapshot Ready • Connect ${'$'}{cfg.provider} for Live Zero-Code Posting`);
+      return;
+    }
+    try {
+      setCmsStatus(`Syncing live entries from ${'$'}{cfg.provider}...`);
+      const liveItems = await fetchHeadlessContent(cfg);
+      if (liveItems.length > 0) {
+        setSiteData((prev) => ({
+          ...(prev || baseBundle),
+          items: liveItems
+        }));
+        setCmsStatus(`Live ${'$'}{cfg.provider} Connected (${'$'}{liveItems.length} entries synced)`);
+      }
+    } catch (err) {
+      setCmsStatus(`${'$'}{cfg.provider} Offline Fallback (${'$'}{err.message})`);
+    }
+  }
+
+  const categories = siteData?.categories || [];
+  const items = siteData?.items || [];
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      const matchesType = activeType === 'ALL' || item.contentType === activeType;
-      const matchesCat = activeCategory === 'all' || String(item.categoryId) === String(activeCategory);
-      const matchesQuery = !searchQuery ||
+      const matchesTab = activeTab === 'ALL' || item.contentType === activeTab;
+      const matchesCat = selectedCategory === 'ALL' || item.categoryName === selectedCategory;
+      const matchesQuery =
+        !searchQuery ||
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.summaryOrCaption.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesType && matchesCat && matchesQuery;
+        (item.summary || '').toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesTab && matchesCat && matchesQuery;
     });
-  }, [items, activeType, activeCategory, searchQuery]);
+  }, [items, activeTab, selectedCategory, searchQuery]);
 
   return (
     <div className="min-h-screen bg-[#090E1A] text-slate-100 font-sans">
-      <header className="border-b border-slate-800 bg-[#111827]/90 backdrop-blur sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-mono font-bold">
-              &lt;R/&gt;
+      <header className="sticky top-0 z-30 backdrop-blur-md bg-[#090E1A]/90 border-b border-slate-800">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <span className="text-xs font-mono uppercase tracking-widest text-emerald-400">
+              {cmsStatus}
             </span>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">{site.siteTitle}</h1>
-              <p className="text-xs text-slate-400">{site.location}</p>
-            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              {siteData?.siteConfig?.siteTitle || '${config.siteTitle}'}
+            </h1>
           </div>
-          <nav className="flex gap-2">
-            {['ALL', 'PROJECT', 'BLOG', 'PHOTO'].map((type) => (
-              <button
-                key={type}
-                onClick={() => setActiveType(type)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-mono transition ${'$'}{
-                  activeType === type
-                    ? 'bg-emerald-500 text-slate-950 font-bold'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                {type === 'ALL' ? 'All Content' : type + 'S'}
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowComposerModal(true)}
+              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm transition"
+            >
+              + Post via Headless CMS
+            </button>
+            <button
+              onClick={() => setShowCmsModal(true)}
+              className="px-3 py-2 rounded-lg border border-slate-700 hover:border-cyan-400 text-xs font-mono text-cyan-300"
+            >
+              CMS Settings ({cmsConfig.provider})
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-10">
-        <section className="rounded-3xl bg-gradient-to-br from-slate-900 via-[#0F172A] to-emerald-950/40 border border-slate-800 p-8 mb-8">
-          <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-mono mb-3">
-            Static Site Bundle • $projectsCount Projects • $blogsCount Blogs • $photosCount Photo Stories
-          </span>
-          <h2 className="text-3xl md:text-4xl font-bold mb-3">{site.tagline}</h2>
-          <p className="text-slate-300 max-w-3xl mb-6">{site.bio}</p>
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div className="flex gap-2">
+            {['ALL', 'PROJECT', 'BLOG', 'PHOTO'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded-full text-xs font-mono ${'$'}{
+                  activeTab === tab
+                    ? 'bg-emerald-500 text-slate-950 font-bold'
+                    : 'bg-slate-800/80 text-slate-300'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search blogs, photos, or projects..."
-            className="w-full max-w-md px-4 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700 text-sm"
+            placeholder="Search blogs, projects, photos..."
+            className="px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white"
           />
-        </section>
+        </div>
 
         <div className="flex gap-2 overflow-x-auto pb-4 mb-6">
           <button
-            onClick={() => setActiveCategory('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono shrink-0 ${'$'}{
-              activeCategory === 'all' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-300'
+            onClick={() => setSelectedCategory('ALL')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono ${'$'}{
+              selectedCategory === 'ALL' ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300' : 'bg-slate-900 text-slate-400'
             }`}
           >
-            All Categories ({categories.length})
+            All Categories
           </button>
           {categories.map((cat) => (
             <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-mono shrink-0 border ${'$'}{
-                String(activeCategory) === String(cat.id)
-                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold'
-                  : 'bg-slate-900/90 text-slate-300 border-slate-800'
+              key={cat.id || cat.slug}
+              onClick={() => setSelectedCategory(cat.name)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono whitespace-nowrap ${'$'}{
+                selectedCategory === cat.name
+                  ? 'bg-emerald-500/20 border border-emerald-400 text-emerald-300'
+                  : 'bg-slate-900 text-slate-400'
               }`}
             >
               {cat.name}
@@ -530,27 +576,26 @@ export default function RaselDevBDApp() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredItems.map((item) => (
             <article
-              key={item.id}
-              className="rounded-2xl bg-[#111827] border border-slate-800 overflow-hidden flex flex-col justify-between hover:border-emerald-500/50 transition"
+              key={item.id || item.slug}
+              className="rounded-2xl bg-[#111827] border border-slate-800 p-5 flex flex-col justify-between hover:border-emerald-500/50 transition"
             >
               <div>
-                <img
-                  src={item.staticAssetPath}
-                  alt={item.title}
-                  className="w-full h-48 object-cover bg-slate-900"
-                />
-                <div className="p-5">
-                  <div className="flex items-center justify-between text-xs font-mono text-emerald-400 mb-2">
-                    <span>{item.contentType}</span>
-                    <span>{item.categoryName}</span>
-                  </div>
-                  <h3 className="text-lg font-bold mb-2">{item.title}</h3>
-                  <p className="text-sm text-slate-300 line-clamp-3">{item.summaryOrCaption}</p>
+                <div className="flex items-center justify-between text-xs font-mono text-emerald-400 mb-2">
+                  <span>{item.contentType} • {item.categoryName}</span>
+                  {item.cmsProvider && <span className="text-cyan-400">{item.cmsProvider}</span>}
                 </div>
+                <h2 className="text-lg font-bold text-white mb-2">{item.title}</h2>
+                <p className="text-sm text-slate-300 mb-4">{item.summary}</p>
+                {item.photoCaption && (
+                  <p className="text-xs italic text-amber-300 mb-3">“{item.photoCaption}”</p>
+                )}
               </div>
-              <div className="px-5 pb-4 pt-2 border-t border-slate-800/80 flex justify-between items-center text-xs text-slate-400 font-mono">
-                <span>{item.liveUrl || item.publishedDateIso?.slice(0, 10)}</span>
-                <span>♥ {item.likesCount}</span>
+              <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-800/80">
+                {(item.techStack || []).map((t) => (
+                  <span key={t} className="px-2 py-0.5 rounded bg-slate-800 text-[11px] font-mono text-slate-300">
+                    {t}
+                  </span>
+                ))}
               </div>
             </article>
           ))}
@@ -559,76 +604,37 @@ export default function RaselDevBDApp() {
     </div>
   );
 }
-        """.trimIndent()
-    }
-
-    fun generatePackageJson(): String {
-        return """
-{
-  "name": "rasel-dev-bd-github-pages",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.0"
-  }
-}
-        """.trimIndent()
-    }
-
-    fun generateViteConfig(): String {
-        return """
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-  base: './',
-});
-        """.trimIndent()
+""".trimIndent()
     }
 
     fun generateIndexHtml(config: SiteConfigEntity): String {
         return """
 <!DOCTYPE html>
 <html lang="en" class="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${config.siteTitle} — ${config.tagline}</title>
-    <meta name="description" content="${config.bio}" />
-    <meta property="og:title" content="${config.siteTitle}" />
-    <meta property="og:description" content="${config.tagline}" />
-    <meta property="og:url" content="${config.githubPagesDomain}" />
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-[#090E1A] text-slate-100 antialiased selection:bg-emerald-500 selection:text-slate-950">
-    <div id="root"></div>
-    <script type="module" src="./src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${config.siteTitle} — ${config.ownerName}</title>
+  <meta name="description" content="${config.bio}" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#090E1A] text-slate-100 antialiased selection:bg-emerald-500 selection:text-slate-950">
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
 </html>
-        """.trimIndent()
+""".trimIndent()
     }
 
     fun generateGithubActionsWorkflow(config: SiteConfigEntity): String {
         return """
-# .github/workflows/deploy-gh-pages.yml
-# Automated Static Site Generation & Deployment for ${config.siteTitle} (${config.githubPagesDomain})
-name: Deploy Rasel Dev BD to GitHub Pages
+name: Deploy Rasel Dev BD (React + Headless CMS) to GitHub Pages
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: ["main"]
+  repository_dispatch:
+    types: ["cms-publish", "contentful-webhook", "strapi-webhook"]
   workflow_dispatch:
 
 permissions:
@@ -638,7 +644,7 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
@@ -655,112 +661,39 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies & build static production bundle
+      - name: Install & Build React Static Bundle
+        working-directory: ./github-pages-site
+        env:
+          VITE_CMS_PROVIDER: ${'$'}{{ vars.VITE_CMS_PROVIDER || '${config.cmsProvider}' }}
+          VITE_CONTENTFUL_SPACE_ID: ${'$'}{{ secrets.VITE_CONTENTFUL_SPACE_ID }}
+          VITE_CONTENTFUL_ENVIRONMENT: ${'$'}{{ vars.VITE_CONTENTFUL_ENVIRONMENT || '${config.contentfulEnvironment}' }}
+          VITE_CONTENTFUL_DELIVERY_TOKEN: ${'$'}{{ secrets.VITE_CONTENTFUL_DELIVERY_TOKEN }}
+          VITE_STRAPI_BASE_URL: ${'$'}{{ vars.VITE_STRAPI_BASE_URL || '${config.strapiBaseUrl}' }}
+          VITE_STRAPI_API_TOKEN: ${'$'}{{ secrets.VITE_STRAPI_API_TOKEN }}
         run: |
           npm install
           npm run build
           cp dist/index.html dist/404.html
+          touch dist/.nojekyll
 
-      - name: Upload Pages artifact
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './dist'
+          path: ./github-pages-site/dist
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        """.trimIndent()
+""".trimIndent()
     }
 
-    fun writeGithubPagesZipArchive(
-        context: Context,
-        outputStream: OutputStream,
-        config: SiteConfigEntity,
-        categories: List<CategoryEntity>,
-        publishedItems: List<ContentItemEntity>
-    ) {
-        val jsonBundle = generateStaticJsonBundle(config, categories, publishedItems)
-        val standaloneHtml = generateStandaloneIndexHtml(config, categories, publishedItems)
-        val reactAppJsx = generateReactAppJsx(config, categories, publishedItems)
-        val packageJson = generatePackageJson()
-        val viteConfig = generateViteConfig()
-        val workflowYml = generateGithubActionsWorkflow(config)
-        val mainJsx = """
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.jsx';
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-        """.trimIndent()
-
-        val readmeGuide = """
-# ${config.siteTitle} — GitHub Pages Hosting Bundle
-
-This ZIP archive contains everything needed to host **${config.siteTitle}** on GitHub Pages:
-
-## Method 1: Instant Zero-Build Hosting (Easiest)
-1. Upload the files in the `docs/` folder (`index.html`, `404.html`, `.nojekyll`, `data/content-bundle.json`, and `assets/images/`) to your GitHub repository.
-2. Go to **Settings -> Pages** on GitHub.
-3. Choose **Deploy from a branch** -> select `main` and `/docs` (or `/ (root)` if uploaded to root).
-4. Your site is immediately live! Admin Studio PIN: `${config.adminPasscode}`.
-
-## Method 2: Vite + React + GitHub Actions
-1. Push the root project (`package.json`, `vite.config.js`, `src/`, `public/`, and `.github/workflows/deploy-gh-pages.yml`) to GitHub.
-2. In **Settings -> Pages**, set Source to **GitHub Actions**.
-        """.trimIndent()
-
-        ZipOutputStream(outputStream).use { zip ->
-            fun putTextEntry(path: String, text: String) {
-                zip.putNextEntry(ZipEntry(path))
-                zip.write(text.toByteArray(Charsets.UTF_8))
-                zip.closeEntry()
-            }
-
-            // 1. Instant Zero-Build files (both in root index.html and docs/ folder)
-            putTextEntry("docs/index.html", standaloneHtml)
-            putTextEntry("docs/404.html", standaloneHtml)
-            putTextEntry("docs/.nojekyll", "")
-            putTextEntry("docs/data/content-bundle.json", jsonBundle)
-
-            // 2. Full Vite + React project files
-            putTextEntry("package.json", packageJson)
-            putTextEntry("vite.config.js", viteConfig)
-            putTextEntry("index.html", standaloneHtml)
-            putTextEntry("404.html", standaloneHtml)
-            putTextEntry(".nojekyll", "")
-            putTextEntry("data/content-bundle.json", jsonBundle)
-            putTextEntry("public/data/content-bundle.json", jsonBundle)
-            putTextEntry("src/main.jsx", mainJsx)
-            putTextEntry("src/App.jsx", reactAppJsx)
-            putTextEntry(".github/workflows/deploy-gh-pages.yml", workflowYml)
-            putTextEntry("README-GITHUB-PAGES.md", readmeGuide)
-
-            // 3. Copy bundled drawable images into assets/images/ and docs/assets/images/
-            val drawablesToCopy = listOf(
-                R.drawable.img_hero_banner to "img_hero_banner.jpg",
-                R.drawable.img_project_cloud to "img_project_cloud.jpg",
-                R.drawable.img_photo_dhaka to "img_photo_dhaka.jpg",
-                R.drawable.img_avatar_rasel to "img_avatar_rasel.jpg"
-            )
-
-            drawablesToCopy.forEach { (resId, fileName) ->
-                runCatching {
-                    val bytes = context.resources.openRawResource(resId).use { it.readBytes() }
-                    listOf(
-                        "assets/images/$fileName",
-                        "public/assets/images/$fileName",
-                        "docs/assets/images/$fileName"
-                    ).forEach { targetPath ->
-                        zip.putNextEntry(ZipEntry(targetPath))
-                        zip.write(bytes)
-                        zip.closeEntry()
-                    }
-                }
-            }
+    private fun resolveWebMediaPath(mediaSource: String): String {
+        return when {
+            mediaSource.startsWith("http://") || mediaSource.startsWith("https://") -> mediaSource
+            mediaSource.contains("img_project_cloud") -> "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80"
+            mediaSource.contains("img_photo_dhaka") -> "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80"
+            mediaSource.contains("img_avatar_rasel") -> "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80"
+            else -> "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80"
         }
     }
 }
